@@ -16,7 +16,6 @@ Standards-Version: 3.9.7
 Homepage: https://linuxcontainers.org
 Vcs-Git: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
-XS-Testsuite: autopkgtest
 
 Package: lxcfs
 Architecture: any
@@ -38,7 +37,7 @@ Depends: ${shlibs:Depends},
          libpam-runtime (>= 1.0.1-6),
          systemd | cgroup-lite
 Conflicts: libpam-cgm
-Description: FUSE based filesystem for LXC
+Description: PAM module for managing cgroups for LXC
  LXCFS provides a FUSE based filesystem to improve the LXC experience
  within the containers.
  .
