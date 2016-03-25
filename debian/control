@@ -1,7 +1,7 @@
 Source: lxcfs
 Section: admin
 Priority: optional
-Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Maintainer: Adnan Hodzic <adnan@hodzic.org>
 Build-Depends:
         autotools-dev,
         debhelper (>= 9),
@@ -12,10 +12,10 @@ Build-Depends:
         libpam0g-dev,
         libfuse-dev,
         pkg-config,
-Standards-Version: 3.9.6
+Standards-Version: 3.9.7
 Homepage: https://linuxcontainers.org
-Vcs-Git: git://github.com/lxc/lxcfs-pkg-ubuntu
-Vcs-Browser: https://github.com/lxc/lxcfs-pkg-ubuntu
+Vcs-Git: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
+Vcs-Browser: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
 XS-Testsuite: autopkgtest
 
 Package: lxcfs
