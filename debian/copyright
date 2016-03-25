@@ -7,10 +7,11 @@ Files: *
 Copyright: 2014-2015 Canonical Ltd.
 License: Apache-2
 
-Files: cgmanager.c cgmanager.h
+Files: debian/*
 Copyright: 2014-2015 Canonical Ltd.
-           2007-2008 IBM Corp.
-License: LGPL-2.1+
+           2016 Adnan Hodzic <adnan@hodzic.org>
+           2016 Evgeni Golov <evgeni@debian.org>
+License: Apache-2
 
 License: Apache-2
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,22 +28,3 @@ License: Apache-2
  .
  On Debian systems, the complete text of the Apache License 2.0 can
  be found in "/usr/share/common-licenses/Apache-2.0"
-
-License: LGPL-2.1+
- This library is free software; you can redistribute it and/or
- modify it under the terms of the GNU Lesser General Public
- License as published by the Free Software Foundation; either
- version 2.1 of the License, or (at your option) any later version.
- .
- This library is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- Lesser General Public License for more details.
- .
- You should have received a copy of the GNU Lesser General Public
- License along with this library; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- .
- On Debian systems, the full text of the GNU Lesser General Public
- License version 2.1 can be found in the file
- `/usr/share/common-licenses/LGPL-2.1'.
