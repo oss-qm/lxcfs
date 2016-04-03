@@ -1,7 +1,8 @@
 Source: lxcfs
 Section: admin
 Priority: optional
-Maintainer: Adnan Hodzic <adnan@hodzic.org>
+Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
+Uploaders: Adnan Hodzic <adnan@hodzic.org>, Evgeni Golov <evgeni@debian.org>
 Build-Depends:
         autotools-dev,
         debhelper (>= 9),
