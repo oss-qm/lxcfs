@@ -1,3 +1,10 @@
+lxcfs (2.0.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Set Maintainer to pkg-lxc, adnan and me as Uploaders
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 03 Apr 2016 15:20:20 +0200
+
 lxcfs (2.0.0~rc8-1) unstable; urgency=medium
 
   * Initial Debian package release (closes: 775021)
