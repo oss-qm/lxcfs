@@ -36,7 +36,7 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libpam-runtime (>= 1.0.1-6),
-         systemd | cgroup-lite
+         systemd
 Conflicts: libpam-cgm
 Description: PAM module for managing cgroups for LXC
  LXCFS provides a FUSE based filesystem to improve the LXC experience
