@@ -19,7 +19,7 @@ Vcs-Git: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
 
 Package: lxcfs
-Architecture: any
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: FUSE based filesystem for LXC
  LXCFS provides a FUSE based filesystem to improve the LXC experience
