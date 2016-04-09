@@ -3,16 +3,16 @@ Section: admin
 Priority: optional
 Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
 Uploaders: Adnan Hodzic <adnan@hodzic.org>, Evgeni Golov <evgeni@debian.org>
-Build-Depends:
-        autotools-dev,
-        debhelper (>= 9),
-        dh-autoreconf,
-        dh-systemd,
-        help2man,
-        libattr1-dev,
-        libpam0g-dev,
-        libfuse-dev,
-        pkg-config,
+Build-Depends: autotools-dev,
+               debhelper (>= 9),
+               dh-autoreconf,
+               dh-systemd,
+               help2man,
+               libattr1-dev,
+               libfuse-dev,
+               libpam0g-dev,
+               linux-libc-dev,
+               pkg-config
 Standards-Version: 3.9.8
 Homepage: https://linuxcontainers.org
 Vcs-Git: https://anonscm.debian.org/cgit/pkg-lxc/lxcfs.git
