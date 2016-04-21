@@ -1,0 +1,39 @@
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Wed, 20 Apr 2016 11:25:47 -0500
+Subject: fix cg_access() for controller directories
+
+this combines the following upstream patches:
+ 575316c4706e5600f3935e8245027f7de6222656
+ 3f441bc7bec47694a5159df4ddfc1d1093aa8dec
+
+diff --git a/bindings.c b/bindings.c
+index 4e0cbfc..5a8efe6 100644
+--- a/bindings.c
++++ b/bindings.c
+@@ -1791,8 +1791,12 @@ int cg_access(const char *path, int mode)
+ 	if (!controller)
+ 		return -EIO;
+ 	cgroup = find_cgroup_in_path(path);
+-	if (!cgroup)
+-		return -EINVAL;
++	if (!cgroup) {
++		// access("/sys/fs/cgroup/systemd", mode) - rx allowed, w not
++		if ((mode & W_OK) == 0)
++			return 0;
++		return -EACCES;
++	}
+ 
+ 	get_cgdir_and_path(cgroup, &cgdir, &last);
+ 	if (!last) {
+@@ -1805,7 +1809,10 @@ int cg_access(const char *path, int mode)
+ 
+ 	k = cgfs_get_key(controller, path1, path2);
+ 	if (!k) {
+-		ret = -EINVAL;
++		if ((mode & W_OK) == 0)
++			ret = 0;
++		else
++			ret = -EACCES;
+ 		goto out;
+ 	}
+ 	free_key(k);
