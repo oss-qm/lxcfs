@@ -1,3 +1,15 @@
+lxcfs (2.0.0-3) unstable; urgency=medium
+
+  [ Serge Hallyn ]
+  * Add optional dependency on cgroupfs-mount
+
+  [ Evgeni Golov ]
+  * split fix-access-to-cgroup-directories.patch to match upstream commits
+  * Cherrypick upstream patches to fix cpuinfo on s390x. (LP: #1564831)
+  * require isolation-machine to run; the tests can't run under lxc themselves
+
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 28 Apr 2016 19:52:03 +0200
+
 lxcfs (2.0.0-2) unstable; urgency=medium
 
   * update d/watch to properly mangle upstream beta and rc releases
