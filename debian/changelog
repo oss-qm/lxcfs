@@ -1,3 +1,11 @@
+lxcfs (2.0.1-1) unstable; urgency=medium
+
+  * add gbp.conf
+  * Imported Upstream version 2.0.1
+  * drop all patches, they were all pulled from upstream
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 22 May 2016 22:06:28 +0200
+
 lxcfs (2.0.0-3) unstable; urgency=medium
 
   [ Serge Hallyn ]
