@@ -1,4 +1,0 @@
-0001-fix-proc_cpuinfo_read-for-s390x.patch
-0002-s390-print-the-virtualized-cpus-in-cpuinfo_read.patch
-0003-access-allow-rx-to-controller-directories-themselves.patch
-0004-fix-cg_access-for-controller-directories.patch
