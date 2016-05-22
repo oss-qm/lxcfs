@@ -375,7 +375,7 @@ static bool store_hierarchy(char *stridx, char *h)
 		}
 		hierarchies = tmp;
 	}
-	
+
 	hierarchies[num_hierarchies++] = must_copy_string(h);
 	return true;
 }
@@ -439,7 +439,7 @@ bool cgfs_set_value(const char *controller, const char *cgroup, const char *file
 	len = strlen(basedir) + strlen(tmpc) + strlen(cgroup) + strlen(file) + 4;
 	fnam = alloca(len);
 	snprintf(fnam, len, "%s/%s/%s/%s", basedir, tmpc, cgroup, file);
-	
+
 	return write_string(fnam, value);
 }
 
@@ -1791,8 +1791,12 @@ int cg_access(const char *path, int mode)
 	if (!controller)
 		return -EIO;
 	cgroup = find_cgroup_in_path(path);
-	if (!cgroup)
-		return -EINVAL;
+	if (!cgroup) {
+		// access("/sys/fs/cgroup/systemd", mode) - rx allowed, w not
+		if ((mode & W_OK) == 0)
+			return 0;
+		return -EACCES;
+	}
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 	if (!last) {
@@ -1805,7 +1809,10 @@ int cg_access(const char *path, int mode)
 
 	k = cgfs_get_key(controller, path1, path2);
 	if (!k) {
-		ret = -EINVAL;
+		if ((mode & W_OK) == 0)
+			ret = 0;
+		else
+			ret = -EACCES;
 		goto out;
 	}
 	free_key(k);
@@ -2858,7 +2865,7 @@ static int read_file(const char *path, char *buf, size_t size,
 		return 0;
 
 	while (getline(&line, &linelen, f) != -1) {
-		size_t l = snprintf(cache, cache_size, "%s", line);
+		ssize_t l = snprintf(cache, cache_size, "%s", line);
 		if (l < 0) {
 			perror("Error writing to cache");
 			rv = 0;
@@ -2875,7 +2882,8 @@ static int read_file(const char *path, char *buf, size_t size,
 	}
 
 	d->size = total_len;
-	if (total_len > size ) total_len = size;
+	if (total_len > size)
+		total_len = size;
 
 	/* read from off 0 */
 	memcpy(buf, d->buf, total_len);
@@ -2996,7 +3004,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		goto err;
 
 	while (getline(&line, &linelen, f) != -1) {
-		size_t l;
+		ssize_t l;
 		char *printme, lbuf[100];
 
 		memset(lbuf, 0, 100);
@@ -3016,7 +3024,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 			snprintf(lbuf, 100, "SwapTotal:      %8lu kB\n", memswlimit - memlimit);
 			printme = lbuf;
 		} else if (startswith(line, "SwapFree:") && memswlimit > 0 && memswusage > 0) {
-			snprintf(lbuf, 100, "SwapFree:       %8lu kB\n", 
+			snprintf(lbuf, 100, "SwapFree:       %8lu kB\n",
 				(memswlimit - memlimit) - (memswusage - memusage));
 			printme = lbuf;
 		} else if (startswith(line, "Slab:")) {
@@ -3117,8 +3125,8 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 	char *cpuset = NULL;
 	char *line = NULL;
 	size_t linelen = 0, total_len = 0, rv = 0;
-	bool am_printing = false;
-	int curcpu = -1;
+	bool am_printing = false, firstline = true, is_s390x = false;
+	int curcpu = -1, cpu;
 	char *cache = d->buf;
 	size_t cache_size = d->buflen;
 	FILE *f = NULL;
@@ -3151,7 +3159,17 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 		goto err;
 
 	while (getline(&line, &linelen, f) != -1) {
-		size_t l;
+		ssize_t l;
+		if (firstline) {
+			firstline = false;
+			if (strstr(line, "IBM/S390") != NULL) {
+				is_s390x = true;
+				am_printing = true;
+				continue;
+			}
+		}
+		if (strncmp(line, "# processors:", 12) == 0)
+			continue;
 		if (is_processor_line(line)) {
 			am_printing = cpuline_in_cpuset(line, cpuset);
 			if (am_printing) {
@@ -3172,6 +3190,31 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 				total_len += l;
 			}
 			continue;
+		} else if (is_s390x && sscanf(line, "processor %d:", &cpu) == 1) {
+			char *p;
+			if (!cpu_in_cpuset(cpu, cpuset))
+				continue;
+			curcpu ++;
+			p = strchr(line, ':');
+			if (!p || !*p)
+				goto err;
+			p++;
+			l = snprintf(cache, cache_size, "processor %d:%s", curcpu, p);
+			if (l < 0) {
+				perror("Error writing to cache");
+				rv = 0;
+				goto err;
+			}
+			if (l >= cache_size) {
+				fprintf(stderr, "Internal error: truncated write to cache\n");
+				rv = 0;
+				goto err;
+			}
+			cache += l;
+			cache_size -= l;
+			total_len += l;
+			continue;
+
 		}
 		if (am_printing) {
 			l = snprintf(cache, cache_size, "%s", line);
@@ -3189,6 +3232,38 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 			cache_size -= l;
 			total_len += l;
 		}
+	}
+
+	if (is_s390x) {
+		char *origcache = d->buf;
+		ssize_t l;
+		do {
+			d->buf = malloc(d->buflen);
+		} while (!d->buf);
+		cache = d->buf;
+		cache_size = d->buflen;
+		total_len = 0;
+		l = snprintf(cache, cache_size, "vendor_id       : IBM/S390\n");
+		if (l < 0 || l >= cache_size) {
+			free(origcache);
+			goto err;
+		}
+		cache_size -= l;
+		cache += l;
+		total_len += l;
+		l = snprintf(cache, cache_size, "# processors    : %d\n", curcpu + 1);
+		if (l < 0 || l >= cache_size) {
+			free(origcache);
+			goto err;
+		}
+		cache_size -= l;
+		cache += l;
+		total_len += l;
+		l = snprintf(cache, cache_size, "%s", origcache);
+		free(origcache);
+		if (l < 0 || l >= cache_size)
+			goto err;
+		total_len += l;
 	}
 
 	d->cached = 1;
@@ -3261,7 +3336,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 	}
 
 	while (getline(&line, &linelen, f) != -1) {
-		size_t l;
+		ssize_t l;
 		int cpu;
 		char cpu_char[10]; /* That's a lot of cores */
 		char *c;
@@ -3433,7 +3508,7 @@ static int proc_uptime_read(char *buf, size_t size, off_t offset,
 	long int reaperage = getreaperage(fc->pid);
 	unsigned long int busytime = get_reaper_busy(fc->pid), idletime;
 	char *cache = d->buf;
-	size_t total_len = 0;
+	ssize_t total_len = 0;
 
 #if RELOADTEST
 	iwashere();
@@ -3511,15 +3586,15 @@ static int proc_diskstats_read(char *buf, size_t size, off_t offset,
 		return read_file("/proc/diskstats", buf, size, d);
 	prune_init_slice(cg);
 
-	if (!cgfs_get_value("blkio", cg, "blkio.io_serviced", &io_serviced_str))
+	if (!cgfs_get_value("blkio", cg, "blkio.io_serviced_recursive", &io_serviced_str))
 		goto err;
-	if (!cgfs_get_value("blkio", cg, "blkio.io_merged", &io_merged_str))
+	if (!cgfs_get_value("blkio", cg, "blkio.io_merged_recursive", &io_merged_str))
 		goto err;
-	if (!cgfs_get_value("blkio", cg, "blkio.io_service_bytes", &io_service_bytes_str))
+	if (!cgfs_get_value("blkio", cg, "blkio.io_service_bytes_recursive", &io_service_bytes_str))
 		goto err;
-	if (!cgfs_get_value("blkio", cg, "blkio.io_wait_time", &io_wait_time_str))
+	if (!cgfs_get_value("blkio", cg, "blkio.io_wait_time_recursive", &io_wait_time_str))
 		goto err;
-	if (!cgfs_get_value("blkio", cg, "blkio.io_service_time", &io_service_time_str))
+	if (!cgfs_get_value("blkio", cg, "blkio.io_service_time_recursive", &io_service_time_str))
 		goto err;
 
 
@@ -3528,48 +3603,46 @@ static int proc_diskstats_read(char *buf, size_t size, off_t offset,
 		goto err;
 
 	while (getline(&line, &linelen, f) != -1) {
-		size_t l;
-		char *printme, lbuf[256];
+		ssize_t l;
+		char lbuf[256];
 
 		i = sscanf(line, "%u %u %71s", &major, &minor, dev_name);
-		if(i == 3){
-			get_blkio_io_value(io_serviced_str, major, minor, "Read", &read);
-			get_blkio_io_value(io_serviced_str, major, minor, "Write", &write);
-			get_blkio_io_value(io_merged_str, major, minor, "Read", &read_merged);
-			get_blkio_io_value(io_merged_str, major, minor, "Write", &write_merged);
-			get_blkio_io_value(io_service_bytes_str, major, minor, "Read", &read_sectors);
-			read_sectors = read_sectors/512;
-			get_blkio_io_value(io_service_bytes_str, major, minor, "Write", &write_sectors);
-			write_sectors = write_sectors/512;
-
-			get_blkio_io_value(io_service_time_str, major, minor, "Read", &rd_svctm);
-			rd_svctm = rd_svctm/1000000;
-			get_blkio_io_value(io_wait_time_str, major, minor, "Read", &rd_wait);
-			rd_wait = rd_wait/1000000;
-			read_ticks = rd_svctm + rd_wait;
-
-			get_blkio_io_value(io_service_time_str, major, minor, "Write", &wr_svctm);
-			wr_svctm =  wr_svctm/1000000;
-			get_blkio_io_value(io_wait_time_str, major, minor, "Write", &wr_wait);
-			wr_wait =  wr_wait/1000000;
-			write_ticks = wr_svctm + wr_wait;
-
-			get_blkio_io_value(io_service_time_str, major, minor, "Total", &tot_ticks);
-			tot_ticks =  tot_ticks/1000000;
-		}else{
+		if (i != 3)
 			continue;
-		}
+
+		get_blkio_io_value(io_serviced_str, major, minor, "Read", &read);
+		get_blkio_io_value(io_serviced_str, major, minor, "Write", &write);
+		get_blkio_io_value(io_merged_str, major, minor, "Read", &read_merged);
+		get_blkio_io_value(io_merged_str, major, minor, "Write", &write_merged);
+		get_blkio_io_value(io_service_bytes_str, major, minor, "Read", &read_sectors);
+		read_sectors = read_sectors/512;
+		get_blkio_io_value(io_service_bytes_str, major, minor, "Write", &write_sectors);
+		write_sectors = write_sectors/512;
+
+		get_blkio_io_value(io_service_time_str, major, minor, "Read", &rd_svctm);
+		rd_svctm = rd_svctm/1000000;
+		get_blkio_io_value(io_wait_time_str, major, minor, "Read", &rd_wait);
+		rd_wait = rd_wait/1000000;
+		read_ticks = rd_svctm + rd_wait;
+
+		get_blkio_io_value(io_service_time_str, major, minor, "Write", &wr_svctm);
+		wr_svctm =  wr_svctm/1000000;
+		get_blkio_io_value(io_wait_time_str, major, minor, "Write", &wr_wait);
+		wr_wait =  wr_wait/1000000;
+		write_ticks = wr_svctm + wr_wait;
+
+		get_blkio_io_value(io_service_time_str, major, minor, "Total", &tot_ticks);
+		tot_ticks =  tot_ticks/1000000;
 
 		memset(lbuf, 0, 256);
-		if (read || write || read_merged || write_merged || read_sectors || write_sectors || read_ticks || write_ticks) {
+		if (read || write || read_merged || write_merged || read_sectors || write_sectors || read_ticks || write_ticks)
 			snprintf(lbuf, 256, "%u       %u %s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
 				major, minor, dev_name, read, read_merged, read_sectors, read_ticks,
 				write, write_merged, write_sectors, write_ticks, ios_pgr, tot_ticks, rq_ticks);
-			printme = lbuf;
-		} else
+		else
 			continue;
 
-		l = snprintf(cache, cache_size, "%s", printme);
+		l = snprintf(cache, cache_size, "%s", lbuf);
 		if (l < 0) {
 			perror("Error writing to fuse buf");
 			rv = 0;
@@ -3613,7 +3686,8 @@ static int proc_swaps_read(char *buf, size_t size, off_t offset,
 	char *memswlimit_str = NULL, *memlimit_str = NULL, *memusage_str = NULL, *memswusage_str = NULL,
              *memswlimit_default_str = NULL, *memswusage_default_str = NULL;
 	unsigned long memswlimit = 0, memlimit = 0, memusage = 0, memswusage = 0, swap_total = 0, swap_free = 0;
-	size_t total_len = 0, rv = 0;
+	ssize_t total_len = 0, rv = 0;
+	ssize_t l = 0;
 	char *cache = d->buf;
 
 	if (offset) {
@@ -3689,12 +3763,13 @@ static int proc_swaps_read(char *buf, size_t size, off_t offset,
 	}
 
 	if (swap_total > 0) {
-		total_len += snprintf(d->buf + total_len, d->size - total_len,
-				 "none%*svirtual\t\t%lu\t%lu\t0\n", 36, " ",
-				 swap_total, swap_free);
+		l = snprintf(d->buf + total_len, d->size - total_len,
+				"none%*svirtual\t\t%lu\t%lu\t0\n", 36, " ",
+				swap_total, swap_free);
+		total_len += l;
 	}
 
-	if (total_len < 0) {
+	if (total_len < 0 || l < 0) {
 		perror("Error writing to cache");
 		rv = 0;
 		goto err;
