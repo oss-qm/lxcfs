@@ -1,6 +1,7 @@
 lxcfs (2.0.1-2) unstable; urgency=medium
 
-  * libpam_cgfs: don't create new path if we are under /user.slice/user-$uid.slice
+  * libpam_cgfs: don't create new path if we are under
+    /user.slice/user-$uid.slice
   * under_systemd_user_slice: work right when init is in '/'
   * The above two patches together: Closes: #826260
 
