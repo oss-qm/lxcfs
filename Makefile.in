@@ -154,13 +154,15 @@ liblxcfstest_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(liblxcfstest_la_CFLAGS) $(CFLAGS) $(liblxcfstest_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am__DEPENDENCIES_1 =
-pam_cgfs_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+@HAVE_PAM_TRUE@pam_cgfs_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am__pam_cgfs_la_SOURCES_DIST = pam/pam_cgfs.c
 am__dirstamp = $(am__leading_dot)dirstamp
-am_pam_cgfs_la_OBJECTS = pam/pam_cgfs_la-pam_cgfs.lo
+@HAVE_PAM_TRUE@am_pam_cgfs_la_OBJECTS = pam/pam_cgfs_la-pam_cgfs.lo
 pam_cgfs_la_OBJECTS = $(am_pam_cgfs_la_OBJECTS)
 pam_cgfs_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(pam_cgfs_la_CFLAGS) \
 	$(CFLAGS) $(pam_cgfs_la_LDFLAGS) $(LDFLAGS) -o $@
+@HAVE_PAM_TRUE@am_pam_cgfs_la_rpath = -rpath $(pamdir)
 PROGRAMS = $(bin_PROGRAMS)
 am_lxcfs_OBJECTS = lxcfs-lxcfs.$(OBJEXT)
 lxcfs_OBJECTS = $(am_lxcfs_OBJECTS)
@@ -205,7 +207,7 @@ am__v_CCLD_1 =
 SOURCES = $(liblxcfs_la_SOURCES) $(liblxcfstest_la_SOURCES) \
 	$(pam_cgfs_la_SOURCES) $(lxcfs_SOURCES)
 DIST_SOURCES = $(liblxcfs_la_SOURCES) $(liblxcfstest_la_SOURCES) \
-	$(pam_cgfs_la_SOURCES) $(lxcfs_SOURCES)
+	$(am__pam_cgfs_la_SOURCES_DIST) $(lxcfs_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -453,11 +455,11 @@ EXTRA_DIST = \
 	lxcfs.man.add
 
 @HAVE_HELP2MAN_TRUE@man_MANS = lxcfs.1
-pam_LTLIBRARIES = pam_cgfs.la
-pam_cgfs_la_SOURCES = pam/pam_cgfs.c
-pam_cgfs_la_CFLAGS = $(AM_CFLAGS)
-pam_cgfs_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir)
-pam_cgfs_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version -shared
+@HAVE_PAM_TRUE@pam_LTLIBRARIES = pam_cgfs.la
+@HAVE_PAM_TRUE@pam_cgfs_la_SOURCES = pam/pam_cgfs.c
+@HAVE_PAM_TRUE@pam_cgfs_la_CFLAGS = $(AM_CFLAGS)
+@HAVE_PAM_TRUE@pam_cgfs_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir)
+@HAVE_PAM_TRUE@pam_cgfs_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version -shared
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -597,7 +599,7 @@ pam/pam_cgfs_la-pam_cgfs.lo: pam/$(am__dirstamp) \
 	pam/$(DEPDIR)/$(am__dirstamp)
 
 pam_cgfs.la: $(pam_cgfs_la_OBJECTS) $(pam_cgfs_la_DEPENDENCIES) $(EXTRA_pam_cgfs_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(pam_cgfs_la_LINK) -rpath $(pamdir) $(pam_cgfs_la_OBJECTS) $(pam_cgfs_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(pam_cgfs_la_LINK) $(am_pam_cgfs_la_rpath) $(pam_cgfs_la_OBJECTS) $(pam_cgfs_la_LIBADD) $(LIBS)
 install-binPROGRAMS: $(bin_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(bin_PROGRAMS)'; test -n "$(bindir)" || list=; \
@@ -1130,6 +1132,8 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+@HAVE_PAM_FALSE@uninstall-local:
+@HAVE_PAM_FALSE@install-data-hook:
 clean: clean-recursive
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
@@ -1243,11 +1247,11 @@ TEST_SYSCALLS: tests/test_syscalls.c
 	$(CC) -o tests/test_syscalls tests/test_syscalls.c
 #pam_cgfs_la_CFLAGS += -DDEBUG
 
-install-data-hook:     install-pamLTLIBRARIES
-	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.la"
-	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.a"
-uninstall-local:
-	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.so"
+@HAVE_PAM_TRUE@install-data-hook:     install-pamLTLIBRARIES
+@HAVE_PAM_TRUE@	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.la"
+@HAVE_PAM_TRUE@	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.a"
+@HAVE_PAM_TRUE@uninstall-local:
+@HAVE_PAM_TRUE@	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.so"
 
 tests: TEST_READ TEST_CPUSET TEST_SYSCALLS
 
