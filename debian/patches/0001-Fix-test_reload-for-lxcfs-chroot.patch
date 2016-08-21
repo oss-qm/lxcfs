@@ -1,0 +1,72 @@
+From 4e29cb8abdfcaea83b35930cf64dbe1ad6efc60a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?St=C3=A9phane=20Graber?= <stgraber@ubuntu.com>
+Date: Tue, 16 Aug 2016 12:36:01 -0400
+Subject: [PATCH] Fix test_reload for lxcfs chroot
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Stéphane Graber <stgraber@ubuntu.com>
+---
+ bindings.c           | 10 +---------
+ tests/test_reload.sh |  8 ++++----
+ 2 files changed, 5 insertions(+), 13 deletions(-)
+
+diff --git a/bindings.c b/bindings.c
+index 04f0b08..2fb4acf 100644
+--- a/bindings.c
++++ b/bindings.c
+@@ -3610,17 +3610,9 @@ out:
+ #if RELOADTEST
+ void iwashere(void)
+ {
+-	char *name, *cwd = get_current_dir_name();
+-	size_t len;
+ 	int fd;
+ 
+-	if (!cwd)
+-		exit(1);
+-	len = strlen(cwd) + strlen("/iwashere") + 1;
+-	name = alloca(len);
+-	snprintf(name, len, "%s/iwashere", cwd);
+-	free(cwd);
+-	fd = creat(name, 0755);
++	fd = creat("/tmp/lxcfs-iwashere", 0644);
+ 	if (fd >= 0)
+ 		close(fd);
+ }
+diff --git a/tests/test_reload.sh b/tests/test_reload.sh
+index 5474cbb..5e37ace 100755
+--- a/tests/test_reload.sh
++++ b/tests/test_reload.sh
+@@ -26,7 +26,7 @@ cleanup() {
+     umount -l ${testdir}
+   fi
+   rm -rf ${testdir} ${installdir}
+-  rm -f iwashere
++  rm -f /tmp/lxcfs-iwashere
+   rm -f ${pidfile}
+   if [ ${FAILED} -eq 1 ]; then
+     echo "liblxcfs.so reload test FAILED"
+@@ -50,9 +50,9 @@ while [ ! -d ${testdir}/proc ]; do
+   count=$((count+1))
+ done
+ 
+-rm -f iwashere
++rm -f /tmp/lxcfs-iwashere
+ cat ${testdir}/proc/uptime
+-[ ! -f iwashere ]
++[ ! -f /tmp/lxcfs-iwashere ]
+ (
+   cd ${topdir};
+   make liblxcfstest.la
+@@ -65,5 +65,5 @@ cp ${libdir}/liblxcfstest.so ${libdir}/liblxcfs.so
+ kill -USR1 ${lxcfspid}
+ 
+ cat ${testdir}/proc/uptime
+-[ -f iwashere ]
++[ -f /tmp/lxcfs-iwashere ]
+ FAILED=0
+-- 
+2.8.1
+
