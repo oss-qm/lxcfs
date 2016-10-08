@@ -1,3 +1,12 @@
+lxcfs (2.0.4-1) unstable; urgency=medium
+
+  * New upstream version 2.0.4
+  * drop patches from upstream
+  * use @builddeps@ instead of apt-get build-dep
+  * add Depends on lsb-base, thanks lintian
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 08 Oct 2016 14:29:11 +0200
+
 lxcfs (2.0.3-1) unstable; urgency=medium
 
   * Imported Upstream version 2.0.3
