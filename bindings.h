@@ -1,6 +1,23 @@
+#ifndef __LXCFS_BINDINGS_H
+#define __LXCFS_BINDINGS_H
+
 /* directory under which we mount the controllers - /run/lxcfs/controllers */
 #define BASEDIR RUNTIME_PATH "/lxcfs/controllers"
 #define ROOTDIR RUNTIME_PATH "/lxcfs/root"
+
+#define lxcfs_debug_stream(stream, format, ...)                                \
+	do {                                                                   \
+		fprintf(stream, "%s: %d: %s: " format, __FILE__, __LINE__,     \
+			__func__, __VA_ARGS__);                                \
+	} while (false)
+
+#define lxcfs_error(format, ...) lxcfs_debug_stream(stderr, format, __VA_ARGS__)
+
+#ifdef DEBUG
+#define lxcfs_debug(format, ...) lxcfs_error(format, __VA_ARGS__)
+#else
+#define lxcfs_debug(format, ...)
+#endif /* DEBUG */
 
 extern int cg_write(const char *path, const char *buf, size_t size, off_t offset,
 	     struct fuse_file_info *fi);
@@ -27,3 +44,5 @@ extern int proc_open(const char *path, struct fuse_file_info *fi);
 extern int proc_read(const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi);
 extern int proc_access(const char *path, int mask);
+
+#endif /* __LXCFS__BINDINGS_H */

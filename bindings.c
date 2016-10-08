@@ -22,6 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <wait.h>
+#include <linux/magic.h>
 #include <linux/sched.h>
 #include <sys/epoll.h>
 #include <sys/mman.h>
@@ -29,6 +30,7 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
+#include <sys/vfs.h>
 
 #include "bindings.h"
 #include "config.h" // for VERSION
@@ -106,7 +108,7 @@ static void lock_mutex(pthread_mutex_t *l)
 	int ret;
 
 	if ((ret = pthread_mutex_lock(l)) != 0) {
-		fprintf(stderr, "pthread_mutex_lock returned:%d %s\n", ret, strerror(ret));
+		lxcfs_error("returned:%d %s\n", ret, strerror(ret));
 		exit(1);
 	}
 }
@@ -136,7 +138,7 @@ static void unlock_mutex(pthread_mutex_t *l)
 	int ret;
 
 	if ((ret = pthread_mutex_unlock(l)) != 0) {
-		fprintf(stderr, "pthread_mutex_unlock returned:%d %s\n", ret, strerror(ret));
+		lxcfs_error("returned:%d %s\n", ret, strerror(ret));
 		exit(1);
 	}
 }
@@ -160,10 +162,10 @@ static bool initpid_still_valid(struct pidns_init_store *e, struct stat *nsfdsb)
 	snprintf(fnam, 100, "/proc/%d", e->initpid);
 	if (stat(fnam, &initsb) < 0)
 		return false;
-#if DEBUG
-	fprintf(stderr, "comparing ctime %ld %ld for pid %d\n",
-		e->ctime, initsb.st_ctime, e->initpid);
-#endif
+
+	lxcfs_debug("Comparing ctime %ld == %ld for pid %d.\n", e->ctime,
+		    initsb.st_ctime, e->initpid);
+
 	if (e->ctime != initsb.st_ctime)
 		return false;
 	return true;
@@ -175,9 +177,8 @@ static void remove_initpid(struct pidns_init_store *e)
 	struct pidns_init_store *tmp;
 	int h;
 
-#if DEBUG
-	fprintf(stderr, "remove_initpid: removing entry for %d\n", e->initpid);
-#endif
+	lxcfs_debug("Remove_initpid: removing entry for %d.\n", e->initpid);
+
 	h = HASH(e->ino);
 	if (pidns_hash_table[h] == e) {
 		pidns_hash_table[h] = e->next;
@@ -212,18 +213,18 @@ static void prune_initpid_store(void)
 	now = time(NULL);
 	if (now < last_prune + PURGE_SECS)
 		return;
-#if DEBUG
-	fprintf(stderr, "pruning\n");
-#endif
+
+	lxcfs_debug("%s\n", "Pruning.");
+
 	last_prune = now;
 	threshold = now - 2 * PURGE_SECS;
 
 	for (i = 0; i < PIDNS_HASH_SIZE; i++) {
 		for (prev = NULL, e = pidns_hash_table[i]; e; ) {
 			if (e->lastcheck < threshold) {
-#if DEBUG
-				fprintf(stderr, "Removing cached entry for %d\n", e->initpid);
-#endif
+
+				lxcfs_debug("Removing cached entry for %d.\n", e->initpid);
+
 				delme = e;
 				if (prev)
 					prev->next = e->next;
@@ -247,9 +248,8 @@ static void save_initpid(struct stat *sb, pid_t pid)
 	struct stat procsb;
 	int h;
 
-#if DEBUG
-	fprintf(stderr, "save_initpid: adding entry for %d\n", pid);
-#endif
+	lxcfs_debug("Save_initpid: adding entry for %d.\n", pid);
+
 	snprintf(fpath, 100, "/proc/%d", pid);
 	if (stat(fpath, &procsb) < 0)
 		return;
@@ -375,12 +375,12 @@ static bool write_string(const char *fnam, const char *string, int fd)
 	len = strlen(string);
 	ret = fwrite(string, 1, len, f);
 	if (ret != len) {
-		fprintf(stderr, "Error writing to file: %s\n", strerror(errno));
+		lxcfs_error("Error writing to file: %s\n", strerror(errno));
 		fclose(f);
 		return false;
 	}
 	if (fclose(f) < 0) {
-		fprintf(stderr, "Error writing to file: %s\n", strerror(errno));
+		lxcfs_error("Error writing to file: %s\n", strerror(errno));
 		return false;
 	}
 	return true;
@@ -400,7 +400,7 @@ static bool store_hierarchy(char *stridx, char *h)
 		n *= ALLOC_NUM;
 		char **tmp = realloc(hierarchies, n * sizeof(char *));
 		if (!tmp) {
-			fprintf(stderr, "Out of memory\n");
+			lxcfs_error("%s\n", strerror(errno));
 			exit(1);
 		}
 		hierarchies = tmp;
@@ -417,7 +417,8 @@ static void print_subsystems(void)
 	fprintf(stderr, "hierarchies:\n");
 	for (i = 0; i < num_hierarchies; i++) {
 		if (hierarchies[i])
-			fprintf(stderr, " %d: %s\n", i, hierarchies[i]);
+			fprintf(stderr, " %2d: fd: %3d: %s\n", i,
+				fd_hierarchies[i], hierarchies[i]);
 	}
 }
 
@@ -504,7 +505,7 @@ static void chown_all_cgroup_files(const char *dirname, uid_t uid, gid_t gid, in
 
 	len = strlen(dirname);
 	if (len >= MAXPATHLEN) {
-		fprintf(stderr, "chown_all_cgroup_files: pathname too long: %s\n", dirname);
+		lxcfs_error("Pathname too long: %s\n", dirname);
 		return;
 	}
 
@@ -514,7 +515,7 @@ static void chown_all_cgroup_files(const char *dirname, uid_t uid, gid_t gid, in
 
 	d = fdopendir(fd1);
 	if (!d) {
-		fprintf(stderr, "chown_all_cgroup_files: failed to open %s\n", dirname);
+		lxcfs_error("Failed to open %s\n", dirname);
 		return;
 	}
 
@@ -523,11 +524,11 @@ static void chown_all_cgroup_files(const char *dirname, uid_t uid, gid_t gid, in
 			continue;
 		ret = snprintf(path, MAXPATHLEN, "%s/%s", dirname, direntp->d_name);
 		if (ret < 0 || ret >= MAXPATHLEN) {
-			fprintf(stderr, "chown_all_cgroup_files: pathname too long under %s\n", dirname);
+			lxcfs_error("Pathname too long under %s\n", dirname);
 			continue;
 		}
 		if (fchownat(fd, path, uid, gid, 0) < 0)
-			fprintf(stderr, "Failed to chown file %s to %u:%u", path, uid, gid);
+			lxcfs_error("Failed to chown file %s to %u:%u", path, uid, gid);
 	}
 	closedir(d);
 }
@@ -563,7 +564,7 @@ int cgfs_create(const char *controller, const char *cg, uid_t uid, gid_t gid)
 	return 0;
 }
 
-static bool recursive_rmdir(const char *dirname, int fd)
+static bool recursive_rmdir(const char *dirname, int fd, const int cfd)
 {
 	struct dirent *direntp;
 	DIR *dir;
@@ -577,9 +578,8 @@ static bool recursive_rmdir(const char *dirname, int fd)
 
 	dir = fdopendir(dupfd);
 	if (!dir) {
-#if DEBUG
-		fprintf(stderr, "%s: failed to open %s: %s\n", __func__, dirname, strerror(errno));
-#endif
+		lxcfs_debug("Failed to open %s: %s.\n", dirname, strerror(errno));
+		close(dupfd);
 		return false;
 	}
 
@@ -587,48 +587,38 @@ static bool recursive_rmdir(const char *dirname, int fd)
 		struct stat mystat;
 		int rc;
 
-		if (!direntp)
-			break;
-
 		if (!strcmp(direntp->d_name, ".") ||
 		    !strcmp(direntp->d_name, ".."))
 			continue;
 
 		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", dirname, direntp->d_name);
 		if (rc < 0 || rc >= MAXPATHLEN) {
-			fprintf(stderr, "pathname too long\n");
+			lxcfs_error("%s\n", "Pathname too long.");
 			continue;
 		}
 
-		ret = fstatat(fd, pathname, &mystat, AT_SYMLINK_NOFOLLOW);
-		if (ret) {
-#if DEBUG
-			fprintf(stderr, "%s: failed to stat %s: %s\n", __func__, pathname, strerror(errno));
-#endif
+		rc = fstatat(cfd, pathname, &mystat, AT_SYMLINK_NOFOLLOW);
+		if (rc) {
+			lxcfs_debug("Failed to stat %s: %s.\n", pathname, strerror(errno));
 			continue;
 		}
-		if (S_ISDIR(mystat.st_mode)) {
-			if (!recursive_rmdir(pathname, fd)) {
-#if DEBUG
-				fprintf(stderr, "Error removing %s\n", pathname);
-#endif
-			}
-		}
+		if (S_ISDIR(mystat.st_mode))
+			if (!recursive_rmdir(pathname, fd, cfd))
+				lxcfs_debug("Error removing %s.\n", pathname);
 	}
 
 	ret = true;
 	if (closedir(dir) < 0) {
-		fprintf(stderr, "%s: failed to close directory %s: %s\n", __func__, dirname, strerror(errno));
+		lxcfs_error("Failed to close directory %s: %s\n", dirname, strerror(errno));
 		ret = false;
 	}
 
-	if (unlinkat(fd, dirname, AT_REMOVEDIR) < 0) {
-#if DEBUG
-		fprintf(stderr, "%s: failed to delete %s: %s\n", __func__, dirname, strerror(errno));
-#endif
+	if (unlinkat(cfd, dirname, AT_REMOVEDIR) < 0) {
+		lxcfs_debug("Failed to delete %s: %s.\n", dirname, strerror(errno));
 		ret = false;
 	}
-	close(fd);
+
+	close(dupfd);
 
 	return ret;
 }
@@ -638,6 +628,7 @@ bool cgfs_remove(const char *controller, const char *cg)
 	int fd, cfd;
 	size_t len;
 	char *dirnam, *tmpc;
+	bool bret;
 
 	tmpc = find_mounted_controller(controller, &cfd);
 	if (!tmpc)
@@ -654,7 +645,9 @@ bool cgfs_remove(const char *controller, const char *cg)
 	if (fd < 0)
 		return false;
 
-	return recursive_rmdir(dirnam, fd);
+	bret = recursive_rmdir(dirnam, fd, cfd);
+	close(fd);
+	return bret;
 }
 
 bool cgfs_chmod_file(const char *controller, const char *file, mode_t mode)
@@ -766,7 +759,7 @@ static bool cgfs_iterate_cgroup(const char *controller, const char *cgroup, bool
 	cg = alloca(len);
 	ret = snprintf(cg, len, "%s%s", *cgroup == '/' ? "." : "", cgroup);
 	if (ret < 0 || (size_t)ret >= len) {
-		fprintf(stderr, "%s: pathname too long under %s\n", __func__, cgroup);
+		lxcfs_error("Pathname too long under %s\n", cgroup);
 		return false;
 	}
 
@@ -787,13 +780,13 @@ static bool cgfs_iterate_cgroup(const char *controller, const char *cgroup, bool
 
 		ret = snprintf(pathname, MAXPATHLEN, "%s/%s", cg, dirent->d_name);
 		if (ret < 0 || ret >= MAXPATHLEN) {
-			fprintf(stderr, "%s: pathname too long under %s\n", __func__, cg);
+			lxcfs_error("Pathname too long under %s\n", cg);
 			continue;
 		}
 
 		ret = fstatat(cfd, pathname, &mystat, AT_SYMLINK_NOFOLLOW);
 		if (ret) {
-			fprintf(stderr, "%s: failed to stat %s: %s\n", __func__, pathname, strerror(errno));
+			lxcfs_error("Failed to stat %s: %s\n", pathname, strerror(errno));
 			continue;
 		}
 		if ((!directories && !S_ISREG(mystat.st_mode)) ||
@@ -813,7 +806,7 @@ static bool cgfs_iterate_cgroup(const char *controller, const char *cgroup, bool
 		sz++;
 	}
 	if (closedir(dir) < 0) {
-		fprintf(stderr, "%s: failed closedir for %s: %s\n", __func__, cgroup, strerror(errno));
+		lxcfs_error("Failed closedir for %s: %s\n", cgroup, strerror(errno));
 		return false;
 	}
 	return true;
@@ -932,8 +925,8 @@ static void *make_key_list_entry(const char *controller, const char *cgroup, con
 {
 	struct cgfs_files *entry = cgfs_get_key(controller, cgroup, dir_entry);
 	if (!entry) {
-		fprintf(stderr, "%s: Error getting files under %s:%s\n",
-			__func__, controller, cgroup);
+		lxcfs_error("Error getting files under %s:%s\n", controller,
+			     cgroup);
 	}
 	return entry;
 }
@@ -1170,7 +1163,7 @@ convert_id_to_ns(FILE *idfile, unsigned int in_id)
 			 * uids wrapped around - unexpected as this is a procfile,
 			 * so just bail.
 			 */
-			fprintf(stderr, "pid wrapparound at entry %u %u %u in %s\n",
+			lxcfs_error("pid wrapparound at entry %u %u %u in %s\n",
 				nsuid, hostuid, count, line);
 			return -1;
 		}
@@ -1276,7 +1269,7 @@ static char *get_next_cgroup_dir(const char *taskcg, const char *querycg)
 	char *start, *end;
 
 	if (strlen(taskcg) <= strlen(querycg)) {
-		fprintf(stderr, "%s: I was fed bad input\n", __func__);
+		lxcfs_error("%s\n", "I was fed bad input.");
 		return NULL;
 	}
 
@@ -1506,23 +1499,30 @@ static char *pick_controller_from_path(struct fuse_context *fc, const char *path
 	const char *p1;
 	char *contr, *slash;
 
-	if (strlen(path) < 9)
+	if (strlen(path) < 9) {
+		errno = EACCES;
 		return NULL;
-	if (*(path+7) != '/')
+	}
+	if (*(path + 7) != '/') {
+		errno = EINVAL;
 		return NULL;
-	p1 = path+8;
+	}
+	p1 = path + 8;
 	contr = strdupa(p1);
-	if (!contr)
+	if (!contr) {
+		errno = ENOMEM;
 		return NULL;
+	}
 	slash = strstr(contr, "/");
 	if (slash)
 		*slash = '\0';
 
 	int i;
-	for (i = 0;  i < num_hierarchies;  i++) {
+	for (i = 0; i < num_hierarchies; i++) {
 		if (hierarchies[i] && strcmp(hierarchies[i], contr) == 0)
 			return hierarchies[i];
 	}
+	errno = ENOENT;
 	return NULL;
 }
 
@@ -1534,12 +1534,17 @@ static const char *find_cgroup_in_path(const char *path)
 {
 	const char *p1;
 
-	if (strlen(path) < 9)
+	if (strlen(path) < 9) {
+		errno = EACCES;
 		return NULL;
-	p1 = strstr(path+8, "/");
-	if (!p1)
+	}
+	p1 = strstr(path + 8, "/");
+	if (!p1) {
+		errno = EINVAL;
 		return NULL;
-	return p1+1;
+	}
+	errno = 0;
+	return p1 + 1;
 }
 
 /*
@@ -1598,7 +1603,7 @@ int cg_getattr(const char *path, struct stat *sb)
 
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EIO;
+		return -errno;
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup) {
 		/* this is just /cgroup/controller, return it as a dir */
@@ -1698,7 +1703,7 @@ int cg_opendir(const char *path, struct fuse_file_info *fi)
 		// return list of keys for the controller, and list of child cgroups
 		controller = pick_controller_from_path(fc, path);
 		if (!controller)
-			return -EIO;
+			return -errno;
 
 		cgroup = find_cgroup_in_path(path);
 		if (!cgroup) {
@@ -1742,8 +1747,11 @@ int cg_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	struct fuse_context *fc = fuse_get_context();
 	char **clist = NULL;
 
+	if (filler(buf, ".", NULL, 0) != 0 || filler(buf, "..", NULL, 0) != 0)
+		return -EIO;
+
 	if (d->type != LXC_TYPE_CGDIR) {
-		fprintf(stderr, "Internal error: file cache info used in readdir\n");
+		lxcfs_error("%s\n", "Internal error: file cache info used in readdir.");
 		return -EIO;
 	}
 	if (!d->cgroup && !d->controller) {
@@ -1853,10 +1861,10 @@ int cg_open(const char *path, struct fuse_file_info *fi)
 
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EIO;
+		return -errno;
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup)
-		return -EINVAL;
+		return -errno;
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 	if (!last) {
@@ -1909,18 +1917,22 @@ out:
 
 int cg_access(const char *path, int mode)
 {
+	int ret;
 	const char *cgroup;
-	char *last = NULL, *path1, *path2, * cgdir = NULL, *controller;
+	char *path1, *path2, *controller;
+	char *last = NULL, *cgdir = NULL;
 	struct cgfs_files *k = NULL;
 	struct fuse_context *fc = fuse_get_context();
-	int ret;
+
+	if (strcmp(path, "/cgroup") == 0)
+		return 0;
 
 	if (!fc)
 		return -EIO;
 
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EIO;
+		return -errno;
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup) {
 		// access("/sys/fs/cgroup/systemd", mode) - rx allowed, w not
@@ -1984,14 +1996,14 @@ static bool wait_for_sock(int sock, int timeout)
 		return false;
 
 	if ((epfd = epoll_create(1)) < 0) {
-		fprintf(stderr, "Failed to create epoll socket: %m\n");
+		lxcfs_error("%s\n", "Failed to create epoll socket: %m.");
 		return false;
 	}
 
 	ev.events = POLLIN_SET;
 	ev.data.fd = sock;
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &ev) < 0) {
-		fprintf(stderr, "Failed adding socket to epoll: %m\n");
+		lxcfs_error("%s\n", "Failed adding socket to epoll: %m.");
 		close(epfd);
 		return false;
 	}
@@ -2039,8 +2051,7 @@ static int send_creds(int sock, struct ucred *cred, char v, bool pingfirst)
 
 	if (pingfirst) {
 		if (msgrecv(sock, buf, 1) != 1) {
-			fprintf(stderr, "%s: Error getting reply from server over socketpair\n",
-				  __func__);
+			lxcfs_error("%s\n", "Error getting reply from server over socketpair.");
 			return SEND_CREDS_FAIL;
 		}
 	}
@@ -2064,8 +2075,7 @@ static int send_creds(int sock, struct ucred *cred, char v, bool pingfirst)
 	msg.msg_iovlen = 1;
 
 	if (sendmsg(sock, &msg, 0) < 0) {
-		fprintf(stderr, "%s: failed at sendmsg: %s\n", __func__,
-			  strerror(errno));
+		lxcfs_error("Failed at sendmsg: %s.\n",strerror(errno));
 		if (errno == 3)
 			return SEND_CREDS_NOTSK;
 		return SEND_CREDS_FAIL;
@@ -2091,12 +2101,12 @@ static bool recv_creds(int sock, struct ucred *cred, char *v)
 	cred->gid = -1;
 
 	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		fprintf(stderr, "Failed to set passcred: %s\n", strerror(errno));
+		lxcfs_error("Failed to set passcred: %s\n", strerror(errno));
 		return false;
 	}
 	buf[0] = '1';
 	if (write(sock, buf, 1) != 1) {
-		fprintf(stderr, "Failed to start write on scm fd: %s\n", strerror(errno));
+		lxcfs_error("Failed to start write on scm fd: %s\n", strerror(errno));
 		return false;
 	}
 
@@ -2111,14 +2121,12 @@ static bool recv_creds(int sock, struct ucred *cred, char *v)
 	msg.msg_iovlen = 1;
 
 	if (!wait_for_sock(sock, 2)) {
-		fprintf(stderr, "Timed out waiting for scm_cred: %s\n",
-			  strerror(errno));
+		lxcfs_error("Timed out waiting for scm_cred: %s\n", strerror(errno));
 		return false;
 	}
 	ret = recvmsg(sock, &msg, MSG_DONTWAIT);
 	if (ret < 0) {
-		fprintf(stderr, "Failed to receive scm_cred: %s\n",
-			  strerror(errno));
+		lxcfs_error("Failed to receive scm_cred: %s\n", strerror(errno));
 		return false;
 	}
 
@@ -2151,10 +2159,8 @@ static int pid_ns_clone_wrapper(void *arg) {
 	char b = '1';
 
 	close(args->cpipe[0]);
-	if (write(args->cpipe[1], &b, sizeof(char)) < 0) {
-		fprintf(stderr, "%s (child): error on write: %s\n",
-			__func__, strerror(errno));
-	}
+	if (write(args->cpipe[1], &b, sizeof(char)) < 0)
+		lxcfs_error("(child): error on write: %s.\n", strerror(errno));
 	close(args->cpipe[1]);
 	return args->wrapped(args->sock, args->tpid);
 }
@@ -2288,13 +2294,11 @@ bool do_read_pids(pid_t tpid, const char *contrl, const char *cg, const char *fi
 
 		// read converted results
 		if (!wait_for_sock(sock[0], 2)) {
-			fprintf(stderr, "%s: timed out waiting for pid from child: %s\n",
-				__func__, strerror(errno));
+			lxcfs_error("Timed out waiting for pid from child: %s.\n", strerror(errno));
 			goto out;
 		}
 		if (read(sock[0], &qpid, sizeof(qpid)) != sizeof(qpid)) {
-			fprintf(stderr, "%s: error reading pid from child: %s\n",
-				__func__, strerror(errno));
+			lxcfs_error("Error reading pid from child: %s.\n", strerror(errno));
 			goto out;
 		}
 		must_strcat_pid(d, &sz, &asz, qpid);
@@ -2309,8 +2313,7 @@ next:
 	v = '1';
 	if (send_creds(sock[0], &cred, v, true) != SEND_CREDS_OK) {
 		// failed to ask child to exit
-		fprintf(stderr, "%s: failed to ask child to exit: %s\n",
-			__func__, strerror(errno));
+		lxcfs_error("Failed to ask child to exit: %s.\n", strerror(errno));
 		goto out;
 	}
 
@@ -2338,7 +2341,7 @@ int cg_read(const char *path, char *buf, size_t size, off_t offset,
 	bool r;
 
 	if (f->type != LXC_TYPE_CGFILE) {
-		fprintf(stderr, "Internal error: directory cache info used in cg_read\n");
+		lxcfs_error("%s\n", "Internal error: directory cache info used in cg_read.");
 		return -EIO;
 	}
 
@@ -2405,12 +2408,11 @@ static int pid_from_ns(int sock, pid_t tpid)
 	cred.gid = 0;
 	while (1) {
 		if (!wait_for_sock(sock, 2)) {
-			fprintf(stderr, "%s: timeout reading from parent\n", __func__);
+			lxcfs_error("%s\n", "Timeout reading from parent.");
 			return 1;
 		}
 		if ((ret = read(sock, &vpid, sizeof(pid_t))) != sizeof(pid_t)) {
-			fprintf(stderr, "%s: bad read from parent: %s\n",
-				__func__, strerror(errno));
+			lxcfs_error("Bad read from parent: %s.\n", strerror(errno));
 			return 1;
 		}
 		if (vpid == -1) // done
@@ -2511,20 +2513,20 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 	*gid = -1;
 	sprintf(line, "/proc/%d/status", pid);
 	if ((f = fopen(line, "r")) == NULL) {
-		fprintf(stderr, "Error opening %s: %s\n", line, strerror(errno));
+		lxcfs_error("Error opening %s: %s\n", line, strerror(errno));
 		return;
 	}
 	while (fgets(line, 400, f)) {
 		if (strncmp(line, "Uid:", 4) == 0) {
 			if (sscanf(line+4, "%u", &u) != 1) {
-				fprintf(stderr, "bad uid line for pid %u\n", pid);
+				lxcfs_error("bad uid line for pid %u\n", pid);
 				fclose(f);
 				return;
 			}
 			*uid = u;
 		} else if (strncmp(line, "Gid:", 4) == 0) {
 			if (sscanf(line+4, "%u", &g) != 1) {
-				fprintf(stderr, "bad gid line for pid %u\n", pid);
+				lxcfs_error("bad gid line for pid %u\n", pid);
 				fclose(f);
 				return;
 			}
@@ -2596,8 +2598,7 @@ static bool do_write_pids(pid_t tpid, uid_t tuid, const char *contrl, const char
 		char v;
 
 		if (write(sock[0], &qpid, sizeof(qpid)) != sizeof(qpid)) {
-			fprintf(stderr, "%s: error writing pid to child: %s\n",
-				__func__, strerror(errno));
+			lxcfs_error("Error writing pid to child: %s.\n", strerror(errno));
 			goto out;
 		}
 
@@ -2621,7 +2622,7 @@ static bool do_write_pids(pid_t tpid, uid_t tuid, const char *contrl, const char
 	/* All good, write the value */
 	qpid = -1;
 	if (write(sock[0], &qpid ,sizeof(qpid)) != sizeof(qpid))
-		fprintf(stderr, "Warning: failed to ask child to exit\n");
+		lxcfs_error("%s\n", "Warning: failed to ask child to exit.");
 
 	if (!fail)
 		answer = true;
@@ -2650,7 +2651,7 @@ int cg_write(const char *path, const char *buf, size_t size, off_t offset,
 	bool r;
 
 	if (f->type != LXC_TYPE_CGFILE) {
-		fprintf(stderr, "Internal error: directory cache info used in cg_write\n");
+		lxcfs_error("%s\n", "Internal error: directory cache info used in cg_write.");
 		return -EIO;
 	}
 
@@ -2703,15 +2704,16 @@ int cg_chown(const char *path, uid_t uid, gid_t gid)
 		return -EIO;
 
 	if (strcmp(path, "/cgroup") == 0)
-		return -EINVAL;
+		return -EPERM;
 
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EINVAL;
+		return errno == ENOENT ? -EPERM : -errno;
+
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup)
 		/* this is just /cgroup/controller */
-		return -EINVAL;
+		return -EPERM;
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 
@@ -2768,15 +2770,16 @@ int cg_chmod(const char *path, mode_t mode)
 		return -EIO;
 
 	if (strcmp(path, "/cgroup") == 0)
-		return -EINVAL;
+		return -EPERM;
 
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EINVAL;
+		return errno == ENOENT ? -EPERM : -errno;
+
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup)
 		/* this is just /cgroup/controller */
-		return -EINVAL;
+		return -EPERM;
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 
@@ -2834,14 +2837,13 @@ int cg_mkdir(const char *path, mode_t mode)
 	if (!fc)
 		return -EIO;
 
-
 	controller = pick_controller_from_path(fc, path);
 	if (!controller)
-		return -EINVAL;
+		return errno == ENOENT ? -EPERM : -errno;
 
 	cgroup = find_cgroup_in_path(path);
 	if (!cgroup)
-		return -EINVAL;
+		return -errno;
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 	if (!last)
@@ -2858,7 +2860,7 @@ int cg_mkdir(const char *path, mode_t mode)
 		else if (last && strcmp(next, last) == 0)
 			ret = -EEXIST;
 		else
-			ret = -ENOENT;
+			ret = -EPERM;
 		goto out;
 	}
 
@@ -2890,16 +2892,20 @@ int cg_rmdir(const char *path)
 		return -EIO;
 
 	controller = pick_controller_from_path(fc, path);
-	if (!controller)
-		return -EINVAL;
+	if (!controller) /* Someone's trying to delete "/cgroup". */
+		return -EPERM;
 
 	cgroup = find_cgroup_in_path(path);
-	if (!cgroup)
-		return -EINVAL;
+	if (!cgroup) /* Someone's trying to delete a controller e.g. "/blkio". */
+		return -EPERM;
 
 	get_cgdir_and_path(cgroup, &cgdir, &last);
 	if (!last) {
-		ret = -EINVAL;
+		/* Someone's trying to delete a cgroup on the same level as the
+		 * "/lxc" cgroup e.g. rmdir "/cgroup/blkio/lxc" or
+		 * rmdir "/cgroup/blkio/init.slice".
+		 */
+		ret = -EPERM;
 		goto out;
 	}
 
@@ -2943,16 +2949,32 @@ static bool startswith(const char *line, const char *pref)
 	return false;
 }
 
-static void get_mem_cached(char *memstat, unsigned long *v)
+static void parse_memstat(char *memstat, unsigned long *cached,
+		unsigned long *active_anon, unsigned long *inactive_anon,
+		unsigned long *active_file, unsigned long *inactive_file,
+		unsigned long *unevictable)
 {
 	char *eol;
 
-	*v = 0;
 	while (*memstat) {
-		if (startswith(memstat, "total_cache")) {
-			sscanf(memstat + 11, "%lu", v);
-			*v /= 1024;
-			return;
+		if (startswith(memstat, "cache")) {
+			sscanf(memstat + 11, "%lu", cached);
+			*cached /= 1024;
+		} else if (startswith(memstat, "active_anon")) {
+			sscanf(memstat + 11, "%lu", active_anon);
+			*active_anon /= 1024;
+		} else if (startswith(memstat, "inactive_anon")) {
+			sscanf(memstat + 11, "%lu", inactive_anon);
+			*inactive_anon /= 1024;
+		} else if (startswith(memstat, "active_file")) {
+			sscanf(memstat + 11, "%lu", active_file);
+			*active_file /= 1024;
+		} else if (startswith(memstat, "inactive_file")) {
+			sscanf(memstat + 11, "%lu", inactive_file);
+			*inactive_file /= 1024;
+		} else if (startswith(memstat, "unevictable")) {
+			sscanf(memstat + 11, "%lu", unevictable);
+			*unevictable /= 1024;
 		}
 		eol = strchr(memstat, '\n');
 		if (!eol)
@@ -3003,7 +3025,7 @@ static int read_file(const char *path, char *buf, size_t size,
 			goto err;
 		}
 		if (l >= cache_size) {
-			fprintf(stderr, "Internal error: truncated write to cache\n");
+			lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 			rv = 0;
 			goto err;
 		}
@@ -3069,7 +3091,8 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		*memswlimit_str = NULL, *memswusage_str = NULL,
 		*memswlimit_default_str = NULL, *memswusage_default_str = NULL;
 	unsigned long memlimit = 0, memusage = 0, memswlimit = 0, memswusage = 0,
-		cached = 0, hosttotal = 0;
+		cached = 0, hosttotal = 0, active_anon = 0, inactive_anon = 0,
+		active_file = 0, inactive_file = 0, unevictable = 0;
 	char *line = NULL;
 	size_t linelen = 0, total_len = 0, rv = 0;
 	char *cache = d->buf;
@@ -3128,7 +3151,9 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 	memlimit /= 1024;
 	memusage /= 1024;
 
-	get_mem_cached(memstat_str, &cached);
+	parse_memstat(memstat_str, &cached, &active_anon,
+			&inactive_anon, &active_file, &inactive_file,
+			&unevictable);
 
 	f = fopen("/proc/meminfo", "r");
 	if (!f)
@@ -3155,8 +3180,10 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 			snprintf(lbuf, 100, "SwapTotal:      %8lu kB\n", memswlimit - memlimit);
 			printme = lbuf;
 		} else if (startswith(line, "SwapFree:") && memswlimit > 0 && memswusage > 0) {
-			snprintf(lbuf, 100, "SwapFree:       %8lu kB\n",
-				(memswlimit - memlimit) - (memswusage - memusage));
+			unsigned long swaptotal = memswlimit - memlimit,
+					swapusage = memswusage - memusage,
+					swapfree = swapusage < swaptotal ? swaptotal - swapusage : 0;
+			snprintf(lbuf, 100, "SwapFree:       %8lu kB\n", swapfree);
 			printme = lbuf;
 		} else if (startswith(line, "Slab:")) {
 			snprintf(lbuf, 100, "Slab:        %8lu kB\n", 0UL);
@@ -3170,6 +3197,35 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		} else if (startswith(line, "SwapCached:")) {
 			snprintf(lbuf, 100, "SwapCached:     %8lu kB\n", 0UL);
 			printme = lbuf;
+		} else if (startswith(line, "Active")) {
+			snprintf(lbuf, 100, "Active:         %8lu kB\n",
+					active_anon + active_file);
+			printme = lbuf;
+		} else if (startswith(line, "Inactive")) {
+			snprintf(lbuf, 100, "Inactive:       %8lu kB\n",
+					inactive_anon + inactive_file);
+			printme = lbuf;
+		} else if (startswith(line, "Active(anon)")) {
+			snprintf(lbuf, 100, "Active(anon):   %8lu kB\n", active_anon);
+			printme = lbuf;
+		} else if (startswith(line, "Inactive(anon)")) {
+			snprintf(lbuf, 100, "Inactive(anon): %8lu kB\n", inactive_anon);
+			printme = lbuf;
+		} else if (startswith(line, "Active(file)")) {
+			snprintf(lbuf, 100, "Active(file):   %8lu kB\n", active_file);
+			printme = lbuf;
+		} else if (startswith(line, "Inactive(file)")) {
+			snprintf(lbuf, 100, "Inactive(file): %8lu kB\n", inactive_file);
+			printme = lbuf;
+		} else if (startswith(line, "Unevictable")) {
+			snprintf(lbuf, 100, "Unevictable:    %8lu kB\n", unevictable);
+			printme = lbuf;
+		} else if (startswith(line, "SReclaimable")) {
+			snprintf(lbuf, 100, "SReclaimable:   %8lu kB\n", 0UL);
+			printme = lbuf;
+		} else if (startswith(line, "SUnreclaim")) {
+			snprintf(lbuf, 100, "SUnreclaim:     %8lu kB\n", 0UL);
+			printme = lbuf;
 		} else
 			printme = line;
 
@@ -3181,7 +3237,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 
 		}
 		if (l >= cache_size) {
-			fprintf(stderr, "Internal error: truncated write to cache\n");
+			lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 			rv = 0;
 			goto err;
 		}
@@ -3312,7 +3368,7 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 					goto err;
 				}
 				if (l >= cache_size) {
-					fprintf(stderr, "Internal error: truncated write to cache\n");
+					lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 					rv = 0;
 					goto err;
 				}
@@ -3337,7 +3393,7 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 				goto err;
 			}
 			if (l >= cache_size) {
-				fprintf(stderr, "Internal error: truncated write to cache\n");
+				lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 				rv = 0;
 				goto err;
 			}
@@ -3355,7 +3411,7 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 				goto err;
 			}
 			if (l >= cache_size) {
-				fprintf(stderr, "Internal error: truncated write to cache\n");
+				lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 				rv = 0;
 				goto err;
 			}
@@ -3462,7 +3518,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 
 	//skip first line
 	if (getline(&line, &linelen, f) < 0) {
-		fprintf(stderr, "proc_stat_read read first line failed\n");
+		lxcfs_error("%s\n", "proc_stat_read read first line failed.");
 		goto err;
 	}
 
@@ -3472,6 +3528,8 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 		char cpu_char[10]; /* That's a lot of cores */
 		char *c;
 
+		if (strlen(line) == 0)
+			continue;
 		if (sscanf(line, "cpu%9[^ ]", cpu_char) != 1) {
 			/* not a ^cpuN line containing a number N, just print it */
 			l = snprintf(cache, cache_size, "%s", line);
@@ -3481,7 +3539,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 				goto err;
 			}
 			if (l >= cache_size) {
-				fprintf(stderr, "Internal error: truncated write to cache\n");
+				lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 				rv = 0;
 				goto err;
 			}
@@ -3508,7 +3566,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 
 		}
 		if (l >= cache_size) {
-			fprintf(stderr, "Internal error: truncated write to cache\n");
+			lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 			rv = 0;
 			goto err;
 		}
@@ -3540,7 +3598,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 		cache += cpuall_len;
 	} else{
 		/* shouldn't happen */
-		fprintf(stderr, "proc_stat_read copy cpuall failed, cpuall_len=%d\n", cpuall_len);
+		lxcfs_error("proc_stat_read copy cpuall failed, cpuall_len=%d.", cpuall_len);
 		cpuall_len = 0;
 	}
 
@@ -3610,17 +3668,9 @@ out:
 #if RELOADTEST
 void iwashere(void)
 {
-	char *name, *cwd = get_current_dir_name();
-	size_t len;
 	int fd;
 
-	if (!cwd)
-		exit(1);
-	len = strlen(cwd) + strlen("/iwashere") + 1;
-	name = alloca(len);
-	snprintf(name, len, "%s/iwashere", cwd);
-	free(cwd);
-	fd = creat(name, 0755);
+	fd = creat("/tmp/lxcfs-iwashere", 0644);
 	if (fd >= 0)
 		close(fd);
 }
@@ -3780,7 +3830,7 @@ static int proc_diskstats_read(char *buf, size_t size, off_t offset,
 			goto err;
 		}
 		if (l >= cache_size) {
-			fprintf(stderr, "Internal error: truncated write to cache\n");
+			lxcfs_error("%s\n", "Internal error: truncated write to cache.");
 			rv = 0;
 			goto err;
 		}
@@ -3973,12 +4023,14 @@ int proc_getattr(const char *path, struct stat *sb)
 int proc_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
 		struct fuse_file_info *fi)
 {
-	if (filler(buf, "cpuinfo", NULL, 0) != 0 ||
-				filler(buf, "meminfo", NULL, 0) != 0 ||
-				filler(buf, "stat", NULL, 0) != 0 ||
-				filler(buf, "uptime", NULL, 0) != 0 ||
-				filler(buf, "diskstats", NULL, 0) != 0 ||
-				filler(buf, "swaps", NULL, 0) != 0)
+	if (filler(buf, ".", NULL, 0) != 0 ||
+	    filler(buf, "..", NULL, 0) != 0 ||
+	    filler(buf, "cpuinfo", NULL, 0) != 0 ||
+	    filler(buf, "meminfo", NULL, 0) != 0 ||
+	    filler(buf, "stat", NULL, 0) != 0 ||
+	    filler(buf, "uptime", NULL, 0) != 0 ||
+	    filler(buf, "diskstats", NULL, 0) != 0 ||
+	    filler(buf, "swaps", NULL, 0) != 0)
 		return -EINVAL;
 	return 0;
 }
@@ -4024,6 +4076,9 @@ int proc_open(const char *path, struct fuse_file_info *fi)
 
 int proc_access(const char *path, int mask)
 {
+	if (strcmp(path, "/proc") == 0 && access(path, R_OK) == 0)
+		return 0;
+
 	/* these are all read-only */
 	if ((mask & ~R_OK) != 0)
 		return -EACCES;
@@ -4076,7 +4131,7 @@ static bool mkdir_p(const char *dir, mode_t mode)
 		if (!makeme)
 			return false;
 		if (mkdir(makeme, mode) && errno != EEXIST) {
-			fprintf(stderr, "failed to create directory '%s': %s",
+			lxcfs_error("Failed to create directory '%s': %s.\n",
 				makeme, strerror(errno));
 			free(makeme);
 			return false;
@@ -4090,37 +4145,87 @@ static bool mkdir_p(const char *dir, mode_t mode)
 static bool umount_if_mounted(void)
 {
 	if (umount2(BASEDIR, MNT_DETACH) < 0 && errno != EINVAL) {
-		fprintf(stderr, "failed to unmount %s: %s.\n", BASEDIR, strerror(errno));
+		lxcfs_error("Failed to unmount %s: %s.\n", BASEDIR, strerror(errno));
 		return false;
 	}
 	return true;
 }
 
-static int pivot_enter(void)
+/* __typeof__ should be safe to use with all compilers. */
+typedef __typeof__(((struct statfs *)NULL)->f_type) fs_type_magic;
+static bool has_fs_type(const struct statfs *fs, fs_type_magic magic_val)
+{
+	return (fs->f_type == (fs_type_magic)magic_val);
+}
+
+/*
+ * looking at fs/proc_namespace.c, it appears we can
+ * actually expect the rootfs entry to very specifically contain
+ * " - rootfs rootfs "
+ * IIUC, so long as we've chrooted so that rootfs is not our root,
+ * the rootfs entry should always be skipped in mountinfo contents.
+ */
+static bool is_on_ramfs(void)
+{
+	FILE *f;
+	char *p, *p2;
+	char *line = NULL;
+	size_t len = 0;
+	int i;
+
+	f = fopen("/proc/self/mountinfo", "r");
+	if (!f)
+		return false;
+
+	while (getline(&line, &len, f) != -1) {
+		for (p = line, i = 0; p && i < 4; i++)
+			p = strchr(p + 1, ' ');
+		if (!p)
+			continue;
+		p2 = strchr(p + 1, ' ');
+		if (!p2)
+			continue;
+		*p2 = '\0';
+		if (strcmp(p + 1, "/") == 0) {
+			// this is '/'.  is it the ramfs?
+			p = strchr(p2 + 1, '-');
+			if (p && strncmp(p, "- rootfs rootfs ", 16) == 0) {
+				free(line);
+				fclose(f);
+				return true;
+			}
+		}
+	}
+	free(line);
+	fclose(f);
+	return false;
+}
+
+static int pivot_enter()
 {
 	int ret = -1, oldroot = -1, newroot = -1;
 
 	oldroot = open("/", O_DIRECTORY | O_RDONLY);
 	if (oldroot < 0) {
-		fprintf(stderr, "%s: Failed to open old root for fchdir.\n", __func__);
+		lxcfs_error("%s\n", "Failed to open old root for fchdir.");
 		return ret;
 	}
 
 	newroot = open(ROOTDIR, O_DIRECTORY | O_RDONLY);
 	if (newroot < 0) {
-		fprintf(stderr, "%s: Failed to open new root for fchdir.\n", __func__);
+		lxcfs_error("%s\n", "Failed to open new root for fchdir.");
 		goto err;
 	}
 
 	/* change into new root fs */
 	if (fchdir(newroot) < 0) {
-		fprintf(stderr, "%s: Failed to change directory to new rootfs: %s.\n", __func__, ROOTDIR);
+		lxcfs_error("Failed to change directory to new rootfs: %s.\n", ROOTDIR);
 		goto err;
 	}
 
 	/* pivot_root into our new root fs */
 	if (pivot_root(".", ".") < 0) {
-		fprintf(stderr, "%s: pivot_root() syscall failed: %s.\n", __func__, strerror(errno));
+		lxcfs_error("pivot_root() syscall failed: %s.\n", strerror(errno));
 		goto err;
 	}
 
@@ -4130,16 +4235,17 @@ static int pivot_enter(void)
 	 * to the old-root.
 	 */
 	if (fchdir(oldroot) < 0) {
-		fprintf(stderr, "%s: Failed to enter old root.\n", __func__);
+		lxcfs_error("%s\n", "Failed to enter old root.");
 		goto err;
 	}
+
 	if (umount2(".", MNT_DETACH) < 0) {
-		fprintf(stderr, "%s: Failed to detach old root.\n", __func__);
+		lxcfs_error("%s\n", "Failed to detach old root.");
 		goto err;
 	}
 
 	if (fchdir(newroot) < 0) {
-		fprintf(stderr, "%s: Failed to re-enter new root.\n", __func__);
+		lxcfs_error("%s\n", "Failed to re-enter new root.");
 		goto err;
 	}
 
@@ -4150,79 +4256,124 @@ err:
 		close(oldroot);
 	if (newroot > 0)
 		close(newroot);
+
 	return ret;
 }
 
-/* Prepare our new clean root. */
-static int pivot_prepare(void)
+static int chroot_enter()
 {
-	if (mkdir(ROOTDIR, 0700) < 0 && errno != EEXIST) {
-		fprintf(stderr, "%s: Failed to create directory for new root.\n", __func__);
+	if (mount(ROOTDIR, "/", NULL, MS_REC | MS_BIND, NULL)) {
+		lxcfs_error("Failed to recursively bind-mount %s into /.", ROOTDIR);
 		return -1;
 	}
 
-	if (mount("/", ROOTDIR, NULL, MS_BIND, 0) < 0) {
-		fprintf(stderr, "%s: Failed to bind-mount / for new root: %s.\n", __func__, strerror(errno));
+	if (chroot(".") < 0) {
+		lxcfs_error("Call to chroot() failed: %s.\n", strerror(errno));
 		return -1;
 	}
 
-	if (mount(RUNTIME_PATH, ROOTDIR RUNTIME_PATH, NULL, MS_BIND, 0) < 0) {
-		fprintf(stderr, "%s: Failed to bind-mount /run into new root: %s.\n", __func__, strerror(errno));
-		return -1;
-	}
-
-	if (mount(BASEDIR, ROOTDIR BASEDIR, NULL, MS_REC | MS_MOVE, 0) < 0) {
-		printf("%s: failed to move " BASEDIR " into new root: %s.\n", __func__, strerror(errno));
+	if (chdir("/") < 0) {
+		lxcfs_error("Failed to change directory: %s.\n", strerror(errno));
 		return -1;
 	}
 
 	return 0;
 }
 
-static bool pivot_new_root(void)
+static int permute_and_enter(void)
+{
+	struct statfs sb;
+
+	if (statfs("/", &sb) < 0) {
+		lxcfs_error("%s\n", "Could not stat / mountpoint.");
+		return -1;
+	}
+
+	/* has_fs_type() is not reliable. When the ramfs is a tmpfs it will
+	 * likely report TMPFS_MAGIC. Hence, when it reports no we still check
+	 * /proc/1/mountinfo. */
+	if (has_fs_type(&sb, RAMFS_MAGIC) || is_on_ramfs())
+		return chroot_enter();
+
+	if (pivot_enter() < 0) {
+		lxcfs_error("%s\n", "Could not perform pivot root.");
+		return -1;
+	}
+
+	return 0;
+}
+
+/* Prepare our new clean root. */
+static int permute_prepare(void)
+{
+	if (mkdir(ROOTDIR, 0700) < 0 && errno != EEXIST) {
+		lxcfs_error("%s\n", "Failed to create directory for new root.");
+		return -1;
+	}
+
+	if (mount("/", ROOTDIR, NULL, MS_BIND, 0) < 0) {
+		lxcfs_error("Failed to bind-mount / for new root: %s.\n", strerror(errno));
+		return -1;
+	}
+
+	if (mount(RUNTIME_PATH, ROOTDIR RUNTIME_PATH, NULL, MS_BIND, 0) < 0) {
+		lxcfs_error("Failed to bind-mount /run into new root: %s.\n", strerror(errno));
+		return -1;
+	}
+
+	if (mount(BASEDIR, ROOTDIR BASEDIR, NULL, MS_REC | MS_MOVE, 0) < 0) {
+		printf("Failed to move " BASEDIR " into new root: %s.\n", strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+/* Calls chroot() on ramfs, pivot_root() in all other cases. */
+static bool permute_root(void)
 {
 	/* Prepare new root. */
-	if (pivot_prepare() < 0)
+	if (permute_prepare() < 0)
 		return false;
 
 	/* Pivot into new root. */
-	if (pivot_enter() < 0)
+	if (permute_and_enter() < 0)
 		return false;
 
 	return true;
 }
 
-static bool setup_cgfs_dir(void)
+static bool cgfs_prepare_mounts(void)
 {
 	if (!mkdir_p(BASEDIR, 0700)) {
-		fprintf(stderr, "Failed to create lxcfs cgroup mountpoint.\n");
+		lxcfs_error("%s\n", "Failed to create lxcfs cgroup mountpoint.");
 		return false;
 	}
 
 	if (!umount_if_mounted()) {
-		fprintf(stderr, "Failed to clean up old lxcfs cgroup mountpoint.\n");
+		lxcfs_error("%s\n", "Failed to clean up old lxcfs cgroup mountpoint.");
 		return false;
 	}
 
 	if (unshare(CLONE_NEWNS) < 0) {
-		fprintf(stderr, "%s: Failed to unshare mount namespace: %s.\n", __func__, strerror(errno));
+		lxcfs_error("Failed to unshare mount namespace: %s.\n", strerror(errno));
 		return false;
 	}
 
 	if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, 0) < 0) {
-		fprintf(stderr, "%s: Failed to remount / private: %s.\n", __func__, strerror(errno));
+		lxcfs_error("Failed to remount / private: %s.\n", strerror(errno));
 		return false;
 	}
 
 	if (mount("tmpfs", BASEDIR, "tmpfs", 0, "size=100000,mode=700") < 0) {
-		fprintf(stderr, "Failed to mount tmpfs over lxcfs cgroup mountpoint.\n");
+		lxcfs_error("%s\n", "Failed to mount tmpfs over lxcfs cgroup mountpoint.");
 		return false;
 	}
 
 	return true;
 }
 
-static bool do_mount_cgroups(void)
+static bool cgfs_mount_hierarchies(void)
 {
 	char *target;
 	size_t clen, len;
@@ -4245,7 +4396,7 @@ static bool do_mount_cgroups(void)
 			return false;
 		}
 		if (mount(controller, target, "cgroup", 0, controller) < 0) {
-			fprintf(stderr, "Failed mounting cgroup %s\n", controller);
+			lxcfs_error("Failed mounting cgroup %s\n", controller);
 			free(target);
 			return false;
 		}
@@ -4262,15 +4413,15 @@ static bool do_mount_cgroups(void)
 
 static bool cgfs_setup_controllers(void)
 {
-	if (!setup_cgfs_dir())
+	if (!cgfs_prepare_mounts())
 		return false;
 
-	if (!do_mount_cgroups()) {
-		fprintf(stderr, "Failed to set up private lxcfs cgroup mounts.\n");
+	if (!cgfs_mount_hierarchies()) {
+		lxcfs_error("%s\n", "Failed to set up private lxcfs cgroup mounts.");
 		return false;
 	}
 
-	if (!pivot_new_root())
+	if (!permute_root())
 		return false;
 
 	return true;
@@ -4292,14 +4443,16 @@ static int preserve_ns(int pid)
 static void __attribute__((constructor)) collect_and_mount_subsystems(void)
 {
 	FILE *f;
-	char *line = NULL;
+	char *cret, *line = NULL;
+	char cwd[MAXPATHLEN];
 	size_t len = 0;
 	int i, init_ns = -1;
 
 	if ((f = fopen("/proc/self/cgroup", "r")) == NULL) {
-		fprintf(stderr, "Error opening /proc/self/cgroup: %s\n", strerror(errno));
+		lxcfs_error("Error opening /proc/self/cgroup: %s\n", strerror(errno));
 		return;
 	}
+
 	while (getline(&line, &len, f) != -1) {
 		char *p, *p2;
 
@@ -4327,23 +4480,38 @@ static void __attribute__((constructor)) collect_and_mount_subsystems(void)
 
 	/* Preserve initial namespace. */
 	init_ns = preserve_ns(getpid());
-	if (init_ns < 0)
+	if (init_ns < 0) {
+		lxcfs_error("%s\n", "Failed to preserve initial mount namespace.");
 		goto out;
+	}
 
 	fd_hierarchies = malloc(sizeof(int *) * num_hierarchies);
-	if (!fd_hierarchies)
+	if (!fd_hierarchies) {
+		lxcfs_error("%s\n", strerror(errno));
 		goto out;
+	}
 
 	for (i = 0; i < num_hierarchies; i++)
 		fd_hierarchies[i] = -1;
 
+	cret = getcwd(cwd, MAXPATHLEN);
+	if (!cret)
+		lxcfs_debug("Could not retrieve current working directory: %s.\n", strerror(errno));
+
 	/* This function calls unshare(CLONE_NEWNS) our initial mount namespace
 	 * to privately mount lxcfs cgroups. */
-	if (!cgfs_setup_controllers())
+	if (!cgfs_setup_controllers()) {
+		lxcfs_error("%s\n", "Failed to setup private cgroup mounts for lxcfs.");
 		goto out;
+	}
 
-	if (setns(init_ns, 0) < 0)
+	if (setns(init_ns, 0) < 0) {
+		lxcfs_error("Failed to switch back to initial mount namespace: %s.\n", strerror(errno));
 		goto out;
+	}
+
+	if (!cret || chdir(cwd) < 0)
+		lxcfs_debug("Could not change back to original working directory: %s.\n", strerror(errno));
 
 	print_subsystems();
 
@@ -4357,6 +4525,8 @@ out:
 static void __attribute__((destructor)) free_subsystems(void)
 {
 	int i;
+
+	lxcfs_debug("%s\n", "Running destructor for liblxcfs.");
 
 	for (i = 0; i < num_hierarchies; i++) {
 		if (hierarchies[i])

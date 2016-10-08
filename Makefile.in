@@ -166,7 +166,7 @@ pam_cgfs_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 PROGRAMS = $(bin_PROGRAMS)
 am_lxcfs_OBJECTS = lxcfs-lxcfs.$(OBJEXT)
 lxcfs_OBJECTS = $(am_lxcfs_OBJECTS)
-lxcfs_DEPENDENCIES = liblxcfs.la
+lxcfs_DEPENDENCIES =
 lxcfs_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(lxcfs_CFLAGS) $(CFLAGS) \
 	$(lxcfs_LDFLAGS) $(LDFLAGS) -o $@
@@ -439,16 +439,16 @@ AM_CFLAGS = -Wall -ggdb -D_GNU_SOURCE -DSBINDIR=\"$(SBINDIR)\" \
 AM_LDFLAGS = $(FUSE_LIBS) -pthread
 liblxcfs_la_SOURCES = bindings.c cpuset.c bindings.h
 liblxcfs_la_CFLAGS = $(AM_CFLAGS)
-liblxcfs_la_LDFLAGS = $(AM_CFLAGS) -shared
+liblxcfs_la_LDFLAGS = $(AM_CFLAGS) -module -avoid-version -shared
 liblxcfstest_la_SOURCES = bindings.c cpuset.c bindings.h
 liblxcfstest_la_CFLAGS = $(AM_CFLAGS) -DRELOADTEST
-liblxcfstest_la_LDFLAGS = $(AM_CFLAGS) -shared
+liblxcfstest_la_LDFLAGS = $(AM_CFLAGS) -module -avoid-version -shared
 noinst_HEADERS = bindings.h
 sodir = $(libdir)
 lib_LTLIBRARIES = liblxcfs.la
 EXTRA_LTLIBRARIES = liblxcfstest.la
 lxcfs_SOURCES = lxcfs.c
-lxcfs_LDADD = liblxcfs.la -ldl
+lxcfs_LDADD = -ldl
 lxcfs_CFLAGS = $(AM_CFLAGS)
 lxcfs_LDFLAGS = $(AM_LDFLAGS)
 EXTRA_DIST = \
