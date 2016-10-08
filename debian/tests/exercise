@@ -10,7 +10,6 @@ set -eu
 
 echo 1 > /sys/fs/cgroup/cpuset/cgroup.clone_children
 chmod ugo+x tests/test_confinement.sh
-mk-build-deps --install --remove --tool 'apt-get --no-install-recommends --yes' debian/control
 apt-get -y install libattr1-dev
 dpkg-source --before-build .
 debian/rules build
