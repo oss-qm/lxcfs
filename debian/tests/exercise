@@ -10,7 +10,6 @@ set -eu
 
 echo 1 > /sys/fs/cgroup/cpuset/cgroup.clone_children
 chmod ugo+x tests/test_confinement.sh
-apt-get -y install libattr1-dev
 dpkg-source --before-build .
 debian/rules build
 make tests
