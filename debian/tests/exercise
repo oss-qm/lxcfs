@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ -d /sys/fs/cgroup/memory ]; then
+if [ ! -d /sys/fs/cgroup/memory ]; then
   if [ ! "$AUTOPKGTEST_REBOOT_MARK" = "lxc-prepare" ]; then
     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/ s/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 cgroup_enable=memory swapaccount=1"/' /etc/default/grub
     update-grub2
