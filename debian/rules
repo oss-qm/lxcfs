@@ -1,6 +1,14 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
+include /usr/share/dpkg/vendor.mk
+
+ifeq ($(DEB_VENDOR),Ubuntu)
+	LXCFS_DEPENDS="systemd | cgroup-lite | cgroupfs-mount"
+else
+	LXCFS_DEPENDS="systemd | cgroupfs-mount"
+endif
+
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
@@ -31,6 +39,9 @@ override_dh_systemd_start:
 override_dh_autoreconf:
 	[ -e m4 ] || mkdir m4
 	dh_autoreconf
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vlxcfs:Depends=$(LXCFS_DEPENDS)
 
 clean:
 	dh_autoreconf_clean
