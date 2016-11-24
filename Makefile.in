@@ -155,7 +155,7 @@ liblxcfstest_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 am__DEPENDENCIES_1 =
 @HAVE_PAM_TRUE@pam_cgfs_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am__pam_cgfs_la_SOURCES_DIST = pam/pam_cgfs.c
+am__pam_cgfs_la_SOURCES_DIST = pam/pam_cgfs.c macro.h
 am__dirstamp = $(am__leading_dot)dirstamp
 @HAVE_PAM_TRUE@am_pam_cgfs_la_OBJECTS = pam/pam_cgfs_la-pam_cgfs.lo
 pam_cgfs_la_OBJECTS = $(am_pam_cgfs_la_OBJECTS)
@@ -437,13 +437,13 @@ AM_CFLAGS = -Wall -ggdb -D_GNU_SOURCE -DSBINDIR=\"$(SBINDIR)\" \
 	-pthread $(FUSE_CFLAGS) -DLIBDIR=\"$(LIBDIR)\" \
 	-DRUNTIME_PATH=\"$(RUNTIME_PATH)\"
 AM_LDFLAGS = $(FUSE_LIBS) -pthread
-liblxcfs_la_SOURCES = bindings.c cpuset.c bindings.h
+liblxcfs_la_SOURCES = macro.h bindings.c cpuset.c bindings.h
 liblxcfs_la_CFLAGS = $(AM_CFLAGS)
 liblxcfs_la_LDFLAGS = $(AM_CFLAGS) -module -avoid-version -shared
-liblxcfstest_la_SOURCES = bindings.c cpuset.c bindings.h
+liblxcfstest_la_SOURCES = bindings.c cpuset.c bindings.h macro.h
 liblxcfstest_la_CFLAGS = $(AM_CFLAGS) -DRELOADTEST
 liblxcfstest_la_LDFLAGS = $(AM_CFLAGS) -module -avoid-version -shared
-noinst_HEADERS = bindings.h
+noinst_HEADERS = bindings.h macro.h
 sodir = $(libdir)
 lib_LTLIBRARIES = liblxcfs.la
 EXTRA_LTLIBRARIES = liblxcfstest.la
@@ -456,7 +456,7 @@ EXTRA_DIST = \
 
 @HAVE_HELP2MAN_TRUE@man_MANS = lxcfs.1
 @HAVE_PAM_TRUE@pam_LTLIBRARIES = pam_cgfs.la
-@HAVE_PAM_TRUE@pam_cgfs_la_SOURCES = pam/pam_cgfs.c
+@HAVE_PAM_TRUE@pam_cgfs_la_SOURCES = pam/pam_cgfs.c macro.h
 @HAVE_PAM_TRUE@pam_cgfs_la_CFLAGS = $(AM_CFLAGS)
 @HAVE_PAM_TRUE@pam_cgfs_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir)
 @HAVE_PAM_TRUE@pam_cgfs_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version -shared
@@ -1245,7 +1245,7 @@ TEST_CPUSET: tests/cpusetrange.c cpuset.c
 	$(CC) -o tests/cpusetrange tests/cpusetrange.c cpuset.c
 TEST_SYSCALLS: tests/test_syscalls.c
 	$(CC) -o tests/test_syscalls tests/test_syscalls.c
-#pam_cgfs_la_CFLAGS += -DDEBUG
+# pam_cgfs_la_CFLAGS += -DDEBUG
 
 @HAVE_PAM_TRUE@install-data-hook:     install-pamLTLIBRARIES
 @HAVE_PAM_TRUE@	rm -f "$(DESTDIR)$(pamdir)/pam_cgfs.la"
