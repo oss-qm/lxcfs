@@ -1,3 +1,12 @@
+lxcfs (2.0.5-1) unstable; urgency=medium
+
+  * New upstream version 2.0.5
+  * drop installing libattr1-dev during tests, it's already installed as B-D
+  * only reboot if the memory cgroup is not enabled yet
+  * dynamically generate depends on a cgroup mounter depending on vendor
+
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 24 Nov 2016 08:30:55 +0100
+
 lxcfs (2.0.4-1) unstable; urgency=medium
 
   * New upstream version 2.0.4
