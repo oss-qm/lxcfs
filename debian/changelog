@@ -1,3 +1,9 @@
+lxcfs (2.0.6-1) unstable; urgency=medium
+
+  * New upstream version 2.0.6
+
+ -- Evgeni Golov <evgeni@debian.org>  Tue, 24 Jan 2017 12:38:18 +0100
+
 lxcfs (2.0.5-1) unstable; urgency=medium
 
   * New upstream version 2.0.5
