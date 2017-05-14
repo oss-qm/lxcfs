@@ -346,7 +346,7 @@ static void trim(char *s)
 {
 	size_t len = strlen(s);
 
-	while (s[len - 1] == '\n')
+	while ((len > 0) && s[len - 1] == '\n')
 		s[--len] = '\0';
 }
 
@@ -1318,11 +1318,11 @@ static int cg_get_version_of_mntpt(const char *path)
 static bool cgv2_init(uid_t uid, gid_t gid)
 {
 	char *mountpoint;
-	bool ret = false;
 	FILE *f = NULL;
 	char *current_cgroup = NULL, *init_cgroup = NULL;
 	char * line = NULL;
 	size_t len = 0;
+	int ret = false;
 
 	current_cgroup = cgv2_get_current_cgroup(getpid());
 	if (!current_cgroup) {
@@ -1366,7 +1366,7 @@ static bool cgv2_init(uid_t uid, gid_t gid)
 
 	f = fopen("/proc/self/mountinfo", "r");
 	if (!f)
-		return false;
+		goto cleanup;
 
 	/* we support simple cgroup mounts and lxcfs mounts */
 	while (getline(&line, &len, f) != -1) {
@@ -1401,7 +1401,7 @@ cleanup:
 		fclose(f);
 	free(line);
 
-	return true;
+	return ret;
 }
 
 /* Detect and store information about mounted cgroupfs v1 hierarchies and the
@@ -1652,11 +1652,14 @@ static char *string_join(const char *sep, const char **parts, bool use_as_prefix
 	size_t sep_len = strlen(sep);
 	size_t result_len = use_as_prefix * sep_len;
 
+	if (!parts)
+		return NULL;
+
 	/* calculate new string length */
 	for (p = (char **)parts; *p; p++)
 		result_len += (p > (char **)parts) * sep_len + strlen(*p);
 
-	result = calloc(result_len + 1, 1);
+	result = calloc(result_len + 1, sizeof(char));
 	if (!result)
 		return NULL;
 
@@ -1712,8 +1715,6 @@ static ssize_t cg_get_max_cpus(char *cpulist)
 
 	if (!c1 && !c2)
 		c1 = maxcpus;
-	else if (c1 > c2)
-		c2 = c1;
 	else if (c1 < c2)
 		c1 = c2;
 
@@ -2100,8 +2101,6 @@ static bool cgv1_create_one(struct cgv1_hierarchy *h, const char *cgroup, uid_t 
 	it = h;
 	for (controller = it->controllers; controller && *controller;
 	     controller++) {
-		created = false;
-
 		if (!cgv1_handle_cpuset_hierarchy(it, cgroup))
 			return false;
 
@@ -2159,10 +2158,7 @@ static bool cgv1_create_one(struct cgv1_hierarchy *h, const char *cgroup, uid_t 
 		break;
 	}
 
-	if (!created)
-		return false;
-
-	return true;
+	return created;
 }
 
 /* Try to remove @cgroup for all given controllers in a cgroupfs v1 hierarchy
