@@ -72,8 +72,8 @@ struct file_info {
 	int cached;
 };
 
-/* reserve buffer size, for cpuall in /proc/stat */
-#define BUF_RESERVE_SIZE 256
+/* Reserve buffer size to account for file size changes. */
+#define BUF_RESERVE_SIZE 512
 
 /*
  * A table caching which pid is init for a pid namespace.
@@ -863,11 +863,11 @@ bool cgfs_get_value(const char *controller, const char *cgroup, const char *file
 	fnam = alloca(len);
 	ret = snprintf(fnam, len, "%s%s/%s", *cgroup == '/' ? "." : "", cgroup, file);
 	if (ret < 0 || (size_t)ret >= len)
-		return NULL;
+		return false;
 
 	fd = openat(cfd, fnam, O_RDONLY);
 	if (fd < 0)
-		return NULL;
+		return false;
 
 	*value = slurp_file(fnam, fd);
 	return *value != NULL;
@@ -2908,7 +2908,7 @@ int cg_rmdir(const char *path)
 	if (initpid <= 0)
 		initpid = fc->pid;
 	if (!caller_is_in_ancestor(initpid, controller, cgroup, &next)) {
-		if (!last || strcmp(next, last) == 0)
+		if (!last || (next && (strcmp(next, last) == 0)))
 			ret = -EBUSY;
 		else
 			ret = -ENOENT;
@@ -3086,7 +3086,8 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		*memswlimit_str = NULL, *memswusage_str = NULL;
 	unsigned long memlimit = 0, memusage = 0, memswlimit = 0, memswusage = 0,
 		cached = 0, hosttotal = 0, active_anon = 0, inactive_anon = 0,
-		active_file = 0, inactive_file = 0, unevictable = 0;
+		active_file = 0, inactive_file = 0, unevictable = 0,
+		hostswtotal = 0;
 	char *line = NULL;
 	size_t linelen = 0, total_len = 0, rv = 0;
 	char *cache = d->buf;
@@ -3148,7 +3149,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 
 		memset(lbuf, 0, 100);
 		if (startswith(line, "MemTotal:")) {
-			sscanf(line+14, "%lu", &hosttotal);
+			sscanf(line+sizeof("MemTotal:")-1, "%lu", &hosttotal);
 			if (hosttotal < memlimit)
 				memlimit = hosttotal;
 			snprintf(lbuf, 100, "MemTotal:       %8lu kB\n", memlimit);
@@ -3160,6 +3161,9 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 			snprintf(lbuf, 100, "MemAvailable:   %8lu kB\n", memlimit - memusage);
 			printme = lbuf;
 		} else if (startswith(line, "SwapTotal:") && memswlimit > 0) {
+			sscanf(line+sizeof("SwapTotal:")-1, "%lu", &hostswtotal);
+			if (hostswtotal < memswlimit - memlimit)
+				memswlimit = hostswtotal + memlimit;
 			snprintf(lbuf, 100, "SwapTotal:      %8lu kB\n", memswlimit - memlimit);
 			printme = lbuf;
 		} else if (startswith(line, "SwapFree:") && memswlimit > 0 && memswusage > 0) {
@@ -3450,6 +3454,28 @@ err:
 	return rv;
 }
 
+static long int getreaperctime(pid_t pid)
+{
+	char fnam[100];
+	struct stat sb;
+	int ret;
+	pid_t qpid;
+
+	qpid = lookup_initpid_in_store(pid);
+	if (qpid <= 0)
+		return 0;
+
+	ret = snprintf(fnam, 100, "/proc/%d", qpid);
+	if (ret < 0 || ret >= 100)
+		return 0;
+
+	if (lstat(fnam, &sb) < 0)
+		return 0;
+
+	return sb.st_ctime;
+}
+
+#define CPUALL_MAX_SIZE (BUF_RESERVE_SIZE / 2)
 static int proc_stat_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
@@ -3460,10 +3486,9 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 	char *line = NULL;
 	size_t linelen = 0, total_len = 0, rv = 0;
 	int curcpu = -1; /* cpu numbering starts at 0 */
-	unsigned long user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0, guest = 0;
+	unsigned long user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0, guest = 0, guest_nice = 0;
 	unsigned long user_sum = 0, nice_sum = 0, system_sum = 0, idle_sum = 0, iowait_sum = 0,
-					irq_sum = 0, softirq_sum = 0, steal_sum = 0, guest_sum = 0;
-#define CPUALL_MAX_SIZE BUF_RESERVE_SIZE
+					irq_sum = 0, softirq_sum = 0, steal_sum = 0, guest_sum = 0, guest_nice_sum = 0;
 	char cpuall[CPUALL_MAX_SIZE];
 	/* reserve for cpu all */
 	char *cache = d->buf + CPUALL_MAX_SIZE;
@@ -3513,7 +3538,10 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 			continue;
 		if (sscanf(line, "cpu%9[^ ]", cpu_char) != 1) {
 			/* not a ^cpuN line containing a number N, just print it */
-			l = snprintf(cache, cache_size, "%s", line);
+			if (strncmp(line, "btime", 5) == 0)
+				l = snprintf(cache, cache_size, "btime %ld\n", getreaperctime(fc->pid));
+			else
+				l = snprintf(cache, cache_size, "%s", line);
 			if (l < 0) {
 				perror("Error writing to cache");
 				rv = 0;
@@ -3556,8 +3584,17 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 		cache_size -= l;
 		total_len += l;
 
-		if (sscanf(line, "%*s %lu %lu %lu %lu %lu %lu %lu %lu %lu", &user, &nice, &system, &idle, &iowait, &irq,
-			&softirq, &steal, &guest) != 9)
+		if (sscanf(line, "%*s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+			   &user,
+			   &nice,
+			   &system,
+			   &idle,
+			   &iowait,
+			   &irq,
+			   &softirq,
+			   &steal,
+			   &guest,
+			   &guest_nice) != 10)
 			continue;
 		user_sum += user;
 		nice_sum += nice;
@@ -3568,16 +3605,26 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 		softirq_sum += softirq;
 		steal_sum += steal;
 		guest_sum += guest;
+		guest_nice_sum += guest_nice;
 	}
 
 	cache = d->buf;
 
-	int cpuall_len = snprintf(cpuall, CPUALL_MAX_SIZE, "%s %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
-		"cpu ", user_sum, nice_sum, system_sum, idle_sum, iowait_sum, irq_sum, softirq_sum, steal_sum, guest_sum);
-	if (cpuall_len > 0 && cpuall_len < CPUALL_MAX_SIZE){
+	int cpuall_len = snprintf(cpuall, CPUALL_MAX_SIZE, "cpu  %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+			user_sum,
+			nice_sum,
+			system_sum,
+			idle_sum,
+			iowait_sum,
+			irq_sum,
+			softirq_sum,
+			steal_sum,
+			guest_sum,
+			guest_nice_sum);
+	if (cpuall_len > 0 && cpuall_len < CPUALL_MAX_SIZE) {
 		memcpy(cache, cpuall, cpuall_len);
 		cache += cpuall_len;
-	} else{
+	} else {
 		/* shouldn't happen */
 		lxcfs_error("proc_stat_read copy cpuall failed, cpuall_len=%d.", cpuall_len);
 		cpuall_len = 0;
@@ -3587,7 +3634,8 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 	total_len += cpuall_len;
 	d->cached = 1;
 	d->size = total_len;
-	if (total_len > size ) total_len = size;
+	if (total_len > size)
+		total_len = size;
 
 	memcpy(buf, d->buf, total_len);
 	rv = total_len;
@@ -3603,23 +3651,12 @@ err:
 
 static long int getreaperage(pid_t pid)
 {
-	char fnam[100];
-	struct stat sb;
-	int ret;
-	pid_t qpid;
+	long int ctime;
 
-	qpid = lookup_initpid_in_store(pid);
-	if (qpid <= 0)
-		return 0;
-
-	ret = snprintf(fnam, 100, "/proc/%d", qpid);
-	if (ret < 0 || ret >= 100)
-		return 0;
-
-	if (lstat(fnam, &sb) < 0)
-		return 0;
-
-	return time(NULL) - sb.st_ctime;
+	ctime = getreaperctime(pid);
+	if (ctime)
+		return time(NULL) - ctime;
+	return ctime;
 }
 
 static unsigned long get_reaper_busy(pid_t task)
@@ -4450,7 +4487,7 @@ static void __attribute__((constructor)) collect_and_mount_subsystems(void)
 		goto out;
 	}
 
-	fd_hierarchies = malloc(sizeof(int *) * num_hierarchies);
+	fd_hierarchies = malloc(sizeof(int) * num_hierarchies);
 	if (!fd_hierarchies) {
 		lxcfs_error("%s\n", strerror(errno));
 		goto out;
