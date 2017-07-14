@@ -1,3 +1,4 @@
+0001-pam-non-functional-changes.patch
 0002-pam-report-back-we-found-the-unified-hierarchy.patch
 0003-bindings-add-mountpoint-for-unified-hierarchy.patch
 0004-pam-chown-cgroup.procs-file-on-unified-hierarchy.patch
