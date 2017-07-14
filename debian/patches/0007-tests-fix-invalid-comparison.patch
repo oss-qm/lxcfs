@@ -1,0 +1,29 @@
+From 5dcba7d16daadc45e2e25cca3eef8caa5bbe05c4 Mon Sep 17 00:00:00 2001
+From: Christian Brauner <christian.brauner@ubuntu.com>
+Date: Mon, 12 Jun 2017 15:47:13 +0200
+Subject: [PATCH 07/11] tests: fix invalid comparison
+
+We now follow the host's /proc/uptime in that we report two digits after the dot
+too. Adapt the tests too.
+
+Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
+---
+ tests/test_proc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/test_proc b/tests/test_proc
+index a965a68..1ba1a14 100755
+--- a/tests/test_proc
++++ b/tests/test_proc
+@@ -36,7 +36,7 @@ echo $((64*1024*1024)) > ${mempath}/lxcfs_test_proc/memory.limit_in_bytes
+ echo 0 > ${cpupath}/lxcfs_test_proc/cpuset.cpus
+ 
+ # Test uptime
+-[ "$(cat ${LXCFSDIR}/proc/uptime)" = "0.0 0.0" ]
++[ "$(cat ${LXCFSDIR}/proc/uptime)" = "0.00 0.00" ]
+ 
+ # Test cpuinfo
+ [ "$(grep "^processor" ${LXCFSDIR}/proc/cpuinfo | wc -l)" = "1" ]
+-- 
+2.13.2
+
