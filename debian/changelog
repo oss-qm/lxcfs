@@ -1,3 +1,22 @@
+lxcfs (2.0.7-2) unstable; urgency=medium
+
+  * import patches from the upstream stable branch
+    + 0002-pam-report-back-we-found-the-unified-hierarchy.patch
+      0003-bindings-add-mountpoint-for-unified-hierarchy.patch
+      Closes: #843450
+    + 0004-pam-chown-cgroup.procs-file-on-unified-hierarchy.patch
+      Closes: #867619
+    + 0005-bindings-calculate-uptime-via-proc-pid-stat.patch
+      0006-bindings-calculate-btime-correctly.patch
+      0007-tests-fix-invalid-comparison.patch
+      0008-temporarily-revert-the-virtualization-of-btime-field.patch
+      These have no Debian bugs, but improve the uptime and btime handling.
+    + 0010-add-cgroupfs-mount-to-Should-Start-Stop-sysvinit-LSB.patch
+      Closes: #859220
+  * add 0001-pam-non-functional-changes, otherwise 0004 won't apply
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 16 Jul 2017 15:04:34 +0200
+
 lxcfs (2.0.7-1) unstable; urgency=medium
 
   * New upstream version 2.0.7
