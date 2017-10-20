@@ -28,6 +28,7 @@
 #include <sys/epoll.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
+#include <linux/limits.h>
 
 #include "bindings.h"
 #include "config.h" // for VERSION
@@ -74,6 +75,7 @@ static volatile sig_atomic_t need_reload;
  * lock and when we know the user_count was 0 */
 static void do_reload(void)
 {
+	char lxcfs_lib_path[PATH_MAX];
 	if (dlopen_handle) {
 		lxcfs_debug("%s\n", "Closing liblxcfs.so handle.");
 		dlclose(dlopen_handle);
@@ -86,7 +88,13 @@ static void do_reload(void)
 		goto good;
 	}
 
-	dlopen_handle = dlopen("/usr/lib/lxcfs/liblxcfs.so", RTLD_LAZY);
+#ifdef LIBDIR
+	/* LIBDIR: autoconf will setup this MACRO. Default value is $PREFIX/lib */
+        snprintf(lxcfs_lib_path, PATH_MAX, "%s/lxcfs/liblxcfs.so", LIBDIR);
+#else
+        snprintf(lxcfs_lib_path, PATH_MAX, "/usr/local/lib/lxcfs/liblxcfs.so");
+#endif
+        dlopen_handle = dlopen(lxcfs_lib_path, RTLD_LAZY);
 	if (!dlopen_handle) {
 		lxcfs_error("Failed to open liblxcfs.so: %s.\n", dlerror());
 		_exit(1);
@@ -737,7 +745,8 @@ static void usage()
 {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "lxcfs [-p pidfile] mountpoint\n");
+	fprintf(stderr, "lxcfs [-f|-d] [-p pidfile] mountpoint\n");
+	fprintf(stderr, "  -f running foreground by default; -d enable debug output \n");
 	fprintf(stderr, "  Default pidfile is %s/lxcfs.pid\n", RUNTIME_PATH);
 	fprintf(stderr, "lxcfs -h\n");
 	exit(1);
@@ -753,7 +762,7 @@ static bool is_help(char *w)
 	return false;
 }
 
-void swallow_arg(int *argcp, char *argv[], char *which)
+bool swallow_arg(int *argcp, char *argv[], char *which)
 {
 	int i;
 
@@ -764,8 +773,9 @@ void swallow_arg(int *argcp, char *argv[], char *which)
 			argv[i] = argv[i+1];
 		}
 		(*argcp)--;
-		return;
+		return true;
 	}
+	return false;
 }
 
 bool swallow_option(int *argcp, char *argv[], char *opt, char **v)
@@ -837,9 +847,10 @@ int main(int argc, char *argv[])
 	int pidfd = -1;
 	char *pidfile = NULL, *v = NULL;
 	size_t pidfile_len;
+	bool debug = false;
 	/*
 	 * what we pass to fuse_main is:
-	 * argv[0] -s -f -o allow_other,directio argv[1] NULL
+	 * argv[0] -s [-f|-d] -o allow_other,directio argv[1] NULL
 	 */
 	int nargs = 5, cnt = 0;
 	char *newargv[6];
@@ -847,6 +858,7 @@ int main(int argc, char *argv[])
 	/* accomodate older init scripts */
 	swallow_arg(&argc, argv, "-s");
 	swallow_arg(&argc, argv, "-f");
+	debug = swallow_arg(&argc, argv, "-d");
 	if (swallow_option(&argc, argv, "-o", &v)) {
 		if (strcmp(v, "allow_other") != 0) {
 			fprintf(stderr, "Warning: unexpected fuse option %s\n", v);
@@ -872,7 +884,11 @@ int main(int argc, char *argv[])
 	}
 
 	newargv[cnt++] = argv[0];
-	newargv[cnt++] = "-f";
+        if (debug) {
+                newargv[cnt++] = "-d";
+        } else {
+                newargv[cnt++] = "-f";
+        }
 	newargv[cnt++] = "-o";
 	newargv[cnt++] = "allow_other,direct_io,entry_timeout=0.5,attr_timeout=0.5";
 	newargv[cnt++] = argv[1];
