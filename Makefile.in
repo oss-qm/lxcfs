@@ -132,9 +132,9 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pamdir)" \
+am__installdirs = "$(DESTDIR)$(lxcfsdir)" "$(DESTDIR)$(pamdir)" \
 	"$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"
-LTLIBRARIES = $(lib_LTLIBRARIES) $(pam_LTLIBRARIES)
+LTLIBRARIES = $(lxcfs_LTLIBRARIES) $(pam_LTLIBRARIES)
 liblxcfs_la_LIBADD =
 am_liblxcfs_la_OBJECTS = liblxcfs_la-bindings.lo liblxcfs_la-cpuset.lo
 liblxcfs_la_OBJECTS = $(am_liblxcfs_la_OBJECTS)
@@ -413,6 +413,7 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
+lxcfsdir = @lxcfsdir@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
@@ -445,7 +446,7 @@ liblxcfstest_la_CFLAGS = $(AM_CFLAGS) -DRELOADTEST
 liblxcfstest_la_LDFLAGS = $(AM_CFLAGS) -module -avoid-version -shared
 noinst_HEADERS = bindings.h macro.h
 sodir = $(libdir)
-lib_LTLIBRARIES = liblxcfs.la
+lxcfs_LTLIBRARIES = liblxcfs.la
 EXTRA_LTLIBRARIES = liblxcfstest.la
 lxcfs_SOURCES = lxcfs.c
 lxcfs_LDADD = -ldl
@@ -514,33 +515,33 @@ $(srcdir)/config.h.in:  $(am__configure_deps)
 distclean-hdr:
 	-rm -f config.h stamp-h1
 
-install-libLTLIBRARIES: $(lib_LTLIBRARIES)
+install-lxcfsLTLIBRARIES: $(lxcfs_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
-	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	@list='$(lxcfs_LTLIBRARIES)'; test -n "$(lxcfsdir)" || list=; \
 	list2=; for p in $$list; do \
 	  if test -f $$p; then \
 	    list2="$$list2 $$p"; \
 	  else :; fi; \
 	done; \
 	test -z "$$list2" || { \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(libdir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(libdir)" || exit 1; \
-	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(libdir)'"; \
-	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(libdir)"; \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(lxcfsdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(lxcfsdir)" || exit 1; \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(lxcfsdir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(lxcfsdir)"; \
 	}
 
-uninstall-libLTLIBRARIES:
+uninstall-lxcfsLTLIBRARIES:
 	@$(NORMAL_UNINSTALL)
-	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	@list='$(lxcfs_LTLIBRARIES)'; test -n "$(lxcfsdir)" || list=; \
 	for p in $$list; do \
 	  $(am__strip_dir) \
-	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(libdir)/$$f'"; \
-	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(libdir)/$$f"; \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(lxcfsdir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(lxcfsdir)/$$f"; \
 	done
 
-clean-libLTLIBRARIES:
-	-test -z "$(lib_LTLIBRARIES)" || rm -f $(lib_LTLIBRARIES)
-	@list='$(lib_LTLIBRARIES)'; \
+clean-lxcfsLTLIBRARIES:
+	-test -z "$(lxcfs_LTLIBRARIES)" || rm -f $(lxcfs_LTLIBRARIES)
+	@list='$(lxcfs_LTLIBRARIES)'; \
 	locs=`for p in $$list; do echo $$p; done | \
 	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
 	      sort -u`; \
@@ -585,7 +586,7 @@ clean-pamLTLIBRARIES:
 	}
 
 liblxcfs.la: $(liblxcfs_la_OBJECTS) $(liblxcfs_la_DEPENDENCIES) $(EXTRA_liblxcfs_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(liblxcfs_la_LINK) -rpath $(libdir) $(liblxcfs_la_OBJECTS) $(liblxcfs_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(liblxcfs_la_LINK) -rpath $(lxcfsdir) $(liblxcfs_la_OBJECTS) $(liblxcfs_la_LIBADD) $(LIBS)
 
 liblxcfstest.la: $(liblxcfstest_la_OBJECTS) $(liblxcfstest_la_DEPENDENCIES) $(EXTRA_liblxcfstest_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(liblxcfstest_la_LINK)  $(liblxcfstest_la_OBJECTS) $(liblxcfstest_la_LIBADD) $(LIBS)
@@ -1093,11 +1094,9 @@ check-am: all-am
 check: check-recursive
 all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(MANS) $(HEADERS) \
 		config.h
-install-binPROGRAMS: install-libLTLIBRARIES
-
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pamdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"; do \
+	for dir in "$(DESTDIR)$(lxcfsdir)" "$(DESTDIR)$(pamdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -1136,8 +1135,8 @@ maintainer-clean-generic:
 @HAVE_PAM_FALSE@install-data-hook:
 clean: clean-recursive
 
-clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
-	clean-libtool clean-pamLTLIBRARIES mostlyclean-am
+clean-am: clean-binPROGRAMS clean-generic clean-libtool \
+	clean-lxcfsLTLIBRARIES clean-pamLTLIBRARIES mostlyclean-am
 
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -1154,14 +1153,15 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-man install-pamLTLIBRARIES
+install-data-am: install-lxcfsLTLIBRARIES install-man \
+	install-pamLTLIBRARIES
 	@$(NORMAL_INSTALL)
 	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
 install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
-install-exec-am: install-binPROGRAMS install-libLTLIBRARIES
+install-exec-am: install-binPROGRAMS
 
 install-html: install-html-recursive
 
@@ -1203,8 +1203,9 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES \
-	uninstall-local uninstall-man uninstall-pamLTLIBRARIES
+uninstall-am: uninstall-binPROGRAMS uninstall-local \
+	uninstall-lxcfsLTLIBRARIES uninstall-man \
+	uninstall-pamLTLIBRARIES
 
 uninstall-man: uninstall-man1
 
@@ -1213,25 +1214,26 @@ uninstall-man: uninstall-man1
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
 	am--refresh check check-am clean clean-binPROGRAMS \
-	clean-cscope clean-generic clean-libLTLIBRARIES clean-libtool \
-	clean-pamLTLIBRARIES cscope cscopelist-am ctags ctags-am dist \
-	dist-all dist-bzip2 dist-gzip dist-lzip dist-shar dist-tarZ \
-	dist-xz dist-zip distcheck distclean distclean-compile \
-	distclean-generic distclean-hdr distclean-libtool \
-	distclean-tags distcleancheck distdir distuninstallcheck dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-binPROGRAMS install-data install-data-am \
-	install-data-hook install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-libLTLIBRARIES install-man \
-	install-man1 install-pamLTLIBRARIES install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
-	uninstall-libLTLIBRARIES uninstall-local uninstall-man \
-	uninstall-man1 uninstall-pamLTLIBRARIES
+	clean-cscope clean-generic clean-libtool \
+	clean-lxcfsLTLIBRARIES clean-pamLTLIBRARIES cscope \
+	cscopelist-am ctags ctags-am dist dist-all dist-bzip2 \
+	dist-gzip dist-lzip dist-shar dist-tarZ dist-xz dist-zip \
+	distcheck distclean distclean-compile distclean-generic \
+	distclean-hdr distclean-libtool distclean-tags distcleancheck \
+	distdir distuninstallcheck dvi dvi-am html html-am info \
+	info-am install install-am install-binPROGRAMS install-data \
+	install-data-am install-data-hook install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-lxcfsLTLIBRARIES \
+	install-man install-man1 install-pamLTLIBRARIES install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-binPROGRAMS uninstall-local \
+	uninstall-lxcfsLTLIBRARIES uninstall-man uninstall-man1 \
+	uninstall-pamLTLIBRARIES
 
 .PRECIOUS: Makefile
 

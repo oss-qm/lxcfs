@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([lxcfs], [2.0.7], [lxc-devel@lists.linuxcontainers.org])
+AC_INIT([lxcfs], [2.0.8], [lxc-devel@lists.linuxcontainers.org])
 AC_SUBST(ACLOCAL_AMFLAGS, "-I m4")
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -151,6 +151,7 @@ AM_CONDITIONAL([INIT_SCRIPT_UPSTART], [echo "$init_script" |grep -q "upstart"])
 AC_MSG_RESULT($init_script)
 
 
+AC_SUBST([lxcfsdir], "${libdir}/lxcfs")
 AC_ARG_WITH(
 	[pamdir],
 	[AS_HELP_STRING([--with-pamdir=PATH],[Specify the directory where PAM modules are stored,

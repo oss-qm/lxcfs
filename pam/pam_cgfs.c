@@ -140,7 +140,7 @@ static bool cg_filter_and_set_cpus(char *path, bool am_initialized);
 static ssize_t cg_get_max_cpus(char *cpulist);
 static int cg_get_version_of_mntpt(const char *path);
 static bool cg_init(uid_t uid, gid_t gid);
-static void cg_mark_to_make_rw(const char *cstring);
+static void cg_mark_to_make_rw(char **list);
 static void cg_prune_empty_cgroups(const char *user);
 static bool cg_systemd_created_user_slice(const char *base_cgroup,
 					  const char *init_cgroup,
@@ -416,6 +416,39 @@ static bool string_in_list(char **list, const char *entry)
 			return true;
 
 	return false;
+}
+
+/*
+ * Creates a null-terminated array of strings, made by splitting the entries in
+ * @str on each @sep. Caller is responsible for calling free_string_list.
+ */
+static char **make_string_list(const char *str, const char *sep)
+{
+	char *copy, *tok;
+	char *saveptr = NULL;
+	char **clist = NULL;
+
+	copy = must_copy_string(str);
+
+	for (tok = strtok_r(copy, sep, &saveptr); tok;
+	     tok = strtok_r(NULL, sep, &saveptr))
+		must_add_to_list(&clist, tok);
+
+	free(copy);
+
+	return clist;
+}
+
+/* Gets the length of a null-terminated array of strings. */
+static size_t string_list_length(char **list)
+{
+	size_t len = 0;
+	char **it;
+
+	for (it = list; it && *it; it++)
+		len++;
+
+	return len;
 }
 
 /* Free null-terminated array of strings. */
@@ -761,7 +794,8 @@ static void cgv1_mark_to_make_rw(char **clist)
 
 	for (it = cgv1_hierarchies; it && *it; it++)
 		if ((*it)->controllers)
-			if (cgv1_controller_lists_intersect((*it)->controllers, clist))
+			if (cgv1_controller_lists_intersect((*it)->controllers, clist) ||
+				string_in_list(clist, "all"))
 				(*it)->create_rw_cgroup = true;
 }
 
@@ -770,30 +804,16 @@ static void cgv1_mark_to_make_rw(char **clist)
  */
 static void cgv2_mark_to_make_rw(char **clist)
 {
-	if (string_in_list(clist, "unified"))
+	if (string_in_list(clist, "unified") || string_in_list(clist, "all"))
 		if (cgv2_hierarchies)
 			(*cgv2_hierarchies)->create_rw_cgroup = true;
 }
 
 /* Wrapper around cgv{1,2}_mark_to_make_rw(). */
-static void cg_mark_to_make_rw(const char *cstring)
+static void cg_mark_to_make_rw(char **clist)
 {
-	char *copy, *tok;
-	char *saveptr = NULL;
-	char **clist = NULL;
-
-	copy = must_copy_string(cstring);
-
-	for (tok = strtok_r(copy, ",", &saveptr); tok;
-	     tok = strtok_r(NULL, ",", &saveptr))
-		must_add_to_list(&clist, tok);
-
-	free(copy);
-
 	cgv1_mark_to_make_rw(clist);
 	cgv2_mark_to_make_rw(clist);
-
-	free_string_list(clist);
 }
 
 /* Prefix any named controllers with "name=", e.g. "name=systemd". */
@@ -1389,6 +1409,7 @@ static bool cgv2_init(uid_t uid, gid_t gid)
 		 * each of those mountpoints will expose identical information.
 		 * So let the first mountpoint we find, win.
 		 */
+		ret = true;
 		break;
 	}
 
@@ -1511,8 +1532,7 @@ static bool cgv2_enter(const char *cgroup)
 	if (!v2->create_rw_cgroup || v2->systemd_user_slice)
 		return true;
 
-	path = must_make_path(v2->mountpoint, v2->base_cgroup, cgroup,
-			      "/cgroup.procs", NULL);
+	path = must_make_path(v2->mountpoint, v2->base_cgroup, cgroup, "/cgroup.procs", NULL);
 	lxcfs_debug("Attempting to enter cgroupfs v2 hierarchy in cgroup \"%s\".\n", path);
 	entered = write_int(path, (int)getpid());
 	if (!entered) {
@@ -2250,7 +2270,7 @@ static bool cgv2_create(const char *cgroup, uid_t uid, gid_t gid, bool *existed)
 	char *clean_base_cgroup;
 	char *path;
 	struct cgv2_hierarchy *v2;
-	bool created = false;
+	bool our_cg = false, created = false;
 
 	*existed = false;
 
@@ -2262,12 +2282,11 @@ static bool cgv2_create(const char *cgroup, uid_t uid, gid_t gid, bool *existed)
 	/* We can't be placed under init's cgroup for the v2 hierarchy. We need
 	 * to be placed under our current cgroup.
 	 */
-	if (cg_systemd_chown_existing_cgroup(v2->mountpoint,
-				v2->base_cgroup, uid, gid,
-				v2->systemd_user_slice))
-		return true;
+	if (cg_systemd_chown_existing_cgroup(v2->mountpoint, v2->base_cgroup,
+					     uid, gid, v2->systemd_user_slice))
+		goto chown_cgroup_procs_file;
 
-	/* We need to make sure that we do not create an endless chaing of
+	/* We need to make sure that we do not create an endless chain of
 	 * sub-cgroups. So we check if we have already logged in somehow (sudo
 	 * -i, su, etc.) and have created a /user/PAM_user/idx cgroup. If so, we
 	 * skip that part.
@@ -2284,14 +2303,18 @@ static bool cgv2_create(const char *cgroup, uid_t uid, gid_t gid, bool *existed)
 	path = must_make_path(v2->mountpoint, v2->base_cgroup, cgroup, NULL);
 	lxcfs_debug("Constructing path \"%s\".\n", path);
 	if (file_exists(path)) {
-		bool our_cg = cg_belongs_to_uid_gid(path, uid, gid);
-		lxcfs_debug("%s existed and does %shave our uid: %d and gid: %d.\n", path, our_cg ? "" : "not ", uid, gid);
+		our_cg = cg_belongs_to_uid_gid(path, uid, gid);
+		lxcfs_debug(
+		    "%s existed and does %shave our uid: %d and gid: %d.\n",
+		    path, our_cg ? "" : "not ", uid, gid);
 		free(path);
-		if (our_cg)
+		if (our_cg) {
 			*existed = false;
-		else
+			goto chown_cgroup_procs_file;
+		} else {
 			*existed = true;
-		return our_cg;
+			return false;
+		}
 	}
 
 	created = mkdir_p(v2->mountpoint, path);
@@ -2300,10 +2323,27 @@ static bool cgv2_create(const char *cgroup, uid_t uid, gid_t gid, bool *existed)
 		return false;
 	}
 
+	/* chown cgroup to user */
 	if (chown(path, uid, gid) < 0)
 		mysyslog(LOG_WARNING, "Failed to chown %s to %d:%d: %s.\n",
 			 path, (int)uid, (int)gid, strerror(errno), NULL);
-	lxcfs_debug("Chowned %s to %d:%d.\n", path, (int)uid, (int)gid);
+	else
+		lxcfs_debug("Chowned %s to %d:%d.\n", path, (int)uid, (int)gid);
+	free(path);
+
+chown_cgroup_procs_file:
+	/* chown cgroup.procs to user */
+	if (v2->systemd_user_slice)
+		path = must_make_path(v2->mountpoint, v2->base_cgroup,
+				      "/cgroup.procs", NULL);
+	else
+		path = must_make_path(v2->mountpoint, v2->base_cgroup, cgroup,
+				      "/cgroup.procs", NULL);
+	if (chown(path, uid, gid) < 0)
+		mysyslog(LOG_WARNING, "Failed to chown %s to %d:%d: %s.\n",
+			 path, (int)uid, (int)gid, strerror(errno), NULL);
+	else
+		lxcfs_debug("Chowned %s to %d:%d.\n", path, (int)uid, (int)gid);
 	free(path);
 
 	return true;
@@ -2547,8 +2587,22 @@ int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc,
 	if (cg_mount_mode == CGROUP_UNKNOWN)
 		return PAM_SESSION_ERR;
 
-	if (argc > 1 && strcmp(argv[0], "-c") == 0)
-		cg_mark_to_make_rw(argv[1]);
+	if (argc > 1 && !strcmp(argv[0], "-c")) {
+		char **clist = make_string_list(argv[1], ",");
+
+		/*
+		 * We don't allow using "all" and other controllers explicitly because
+		 * that simply doesn't make any sense.
+		 */
+		if (string_list_length(clist) > 1 && string_in_list(clist, "all")) {
+			mysyslog(LOG_ERR, "Invalid -c option, cannot specify individual controllers alongside 'all'.\n", NULL);
+			free_string_list(clist);
+			return PAM_SESSION_ERR;
+		}
+
+		cg_mark_to_make_rw(clist);
+		free_string_list(clist);
+	}
 
 	return handle_login(PAM_user, uid, gid);
 }
@@ -2576,8 +2630,22 @@ int pam_sm_close_session(pam_handle_t *pamh, int flags, int argc,
 		if (!cg_init(uid, gid))
 			mysyslog(LOG_ERR, "Failed to get list of controllers\n", NULL);
 
-		if (argc > 1 && strcmp(argv[0], "-c") == 0)
-			cg_mark_to_make_rw(argv[1]);
+		if (argc > 1 && !strcmp(argv[0], "-c")) {
+			char **clist = make_string_list(argv[1], ",");
+
+			/*
+			 * We don't allow using "all" and other controllers explicitly because
+			 * that simply doesn't make any sense.
+			 */
+			if (string_list_length(clist) > 1 && string_in_list(clist, "all")) {
+				mysyslog(LOG_ERR, "Invalid -c option, cannot specify individual controllers alongside 'all'.\n", NULL);
+				free_string_list(clist);
+				return PAM_SESSION_ERR;
+			}
+
+			cg_mark_to_make_rw(clist);
+			free_string_list(clist);
+		}
 	}
 
 	cg_prune_empty_cgroups(PAM_user);
