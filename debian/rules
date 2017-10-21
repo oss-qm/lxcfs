@@ -26,7 +26,6 @@ override_dh_install:
 	dh_install
 
 override_dh_installinit:
-	cp debian/tmp/etc/init/lxcfs.conf debian/lxcfs.upstart
 	cp debian/tmp/etc/rc.d/init.d/lxcfs debian/lxcfs.init
 	dh_installinit -p lxcfs --no-restart-on-upgrade
 
