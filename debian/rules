@@ -23,9 +23,6 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 override_dh_install:
 	cp $(CURDIR)/debian/pam-cgfs.config \
 		$(CURDIR)/debian/libpam-cgfs/usr/share/pam-configs/cgfs
-	mkdir -p $(CURDIR)/debian/tmp/usr/lib/lxcfs
-	cp $(CURDIR)/debian/tmp/usr/lib/*/liblxcfs.so \
-		$(CURDIR)/debian/tmp/usr/lib/lxcfs
 	dh_install
 
 override_dh_installinit:
