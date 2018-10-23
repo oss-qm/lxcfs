@@ -139,6 +139,7 @@ static char **hierarchies;
  * another namespace using the *at() family of functions
  * {openat(), fchownat(), ...}. */
 static int *fd_hierarchies;
+static int cgroup_mount_ns_fd = -1;
 
 static void unlock_mutex(pthread_mutex_t *l)
 {
@@ -377,19 +378,24 @@ static bool write_string(const char *fnam, const char *string, int fd)
 	FILE *f;
 	size_t len, ret;
 
-	if (!(f = fdopen(fd, "w")))
+	f = fdopen(fd, "w");
+	if (!f)
 		return false;
+
 	len = strlen(string);
 	ret = fwrite(string, 1, len, f);
 	if (ret != len) {
-		lxcfs_error("Error writing to file: %s\n", strerror(errno));
+		lxcfs_error("%s - Error writing \"%s\" to \"%s\"\n",
+			    strerror(errno), string, fnam);
 		fclose(f);
 		return false;
 	}
+
 	if (fclose(f) < 0) {
-		lxcfs_error("Error writing to file: %s\n", strerror(errno));
+		lxcfs_error("%s - Failed to close \"%s\"\n", strerror(errno), fnam);
 		return false;
 	}
+
 	return true;
 }
 
@@ -421,6 +427,7 @@ static void print_subsystems(void)
 {
 	int i;
 
+	fprintf(stderr, "mount namespace: %d\n", cgroup_mount_ns_fd);
 	fprintf(stderr, "hierarchies:\n");
 	for (i = 0; i < num_hierarchies; i++) {
 		if (hierarchies[i])
@@ -2954,29 +2961,32 @@ static bool startswith(const char *line, const char *pref)
 static void parse_memstat(char *memstat, unsigned long *cached,
 		unsigned long *active_anon, unsigned long *inactive_anon,
 		unsigned long *active_file, unsigned long *inactive_file,
-		unsigned long *unevictable)
+		unsigned long *unevictable, unsigned long *shmem)
 {
 	char *eol;
 
 	while (*memstat) {
-		if (startswith(memstat, "cache")) {
-			sscanf(memstat + 5, "%lu", cached);
+		if (startswith(memstat, "total_cache")) {
+			sscanf(memstat + 11, "%lu", cached);
 			*cached /= 1024;
-		} else if (startswith(memstat, "active_anon")) {
-			sscanf(memstat + 11, "%lu", active_anon);
+		} else if (startswith(memstat, "total_active_anon")) {
+			sscanf(memstat + 17, "%lu", active_anon);
 			*active_anon /= 1024;
-		} else if (startswith(memstat, "inactive_anon")) {
-			sscanf(memstat + 13, "%lu", inactive_anon);
+		} else if (startswith(memstat, "total_inactive_anon")) {
+			sscanf(memstat + 19, "%lu", inactive_anon);
 			*inactive_anon /= 1024;
-		} else if (startswith(memstat, "active_file")) {
-			sscanf(memstat + 11, "%lu", active_file);
+		} else if (startswith(memstat, "total_active_file")) {
+			sscanf(memstat + 17, "%lu", active_file);
 			*active_file /= 1024;
-		} else if (startswith(memstat, "inactive_file")) {
-			sscanf(memstat + 13, "%lu", inactive_file);
+		} else if (startswith(memstat, "total_inactive_file")) {
+			sscanf(memstat + 19, "%lu", inactive_file);
 			*inactive_file /= 1024;
-		} else if (startswith(memstat, "unevictable")) {
-			sscanf(memstat + 11, "%lu", unevictable);
+		} else if (startswith(memstat, "total_unevictable")) {
+			sscanf(memstat + 17, "%lu", unevictable);
 			*unevictable /= 1024;
+		} else if (startswith(memstat, "total_shmem")) {
+			sscanf(memstat + 11, "%lu", shmem);
+			*shmem /= 1024;
 		}
 		eol = strchr(memstat, '\n');
 		if (!eol)
@@ -3093,7 +3103,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		*memswlimit_str = NULL, *memswusage_str = NULL;
 	unsigned long memlimit = 0, memusage = 0, memswlimit = 0, memswusage = 0,
 		cached = 0, hosttotal = 0, active_anon = 0, inactive_anon = 0,
-		active_file = 0, inactive_file = 0, unevictable = 0,
+		active_file = 0, inactive_file = 0, unevictable = 0, shmem = 0,
 		hostswtotal = 0;
 	char *line = NULL;
 	size_t linelen = 0, total_len = 0, rv = 0;
@@ -3144,7 +3154,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 
 	parse_memstat(memstat_str, &cached, &active_anon,
 			&inactive_anon, &active_file, &inactive_file,
-			&unevictable);
+			&unevictable, &shmem);
 
 	f = fopen("/proc/meminfo", "r");
 	if (!f)
@@ -3165,16 +3175,16 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 			snprintf(lbuf, 100, "MemFree:        %8lu kB\n", memlimit - memusage);
 			printme = lbuf;
 		} else if (startswith(line, "MemAvailable:")) {
-			snprintf(lbuf, 100, "MemAvailable:   %8lu kB\n", memlimit - memusage);
+			snprintf(lbuf, 100, "MemAvailable:   %8lu kB\n", memlimit - memusage + cached);
 			printme = lbuf;
 		} else if (startswith(line, "SwapTotal:") && memswlimit > 0) {
 			sscanf(line+sizeof("SwapTotal:")-1, "%lu", &hostswtotal);
-			if (hostswtotal < memswlimit - memlimit)
-				memswlimit = hostswtotal + memlimit;
-			snprintf(lbuf, 100, "SwapTotal:      %8lu kB\n", memswlimit - memlimit);
+			if (hostswtotal < memswlimit)
+				memswlimit = hostswtotal;
+			snprintf(lbuf, 100, "SwapTotal:      %8lu kB\n", memswlimit);
 			printme = lbuf;
 		} else if (startswith(line, "SwapFree:") && memswlimit > 0 && memswusage > 0) {
-			unsigned long swaptotal = memswlimit - memlimit,
+			unsigned long swaptotal = memswlimit,
 					swapusage = memswusage - memusage,
 					swapfree = swapusage < swaptotal ? swaptotal - swapusage : 0;
 			snprintf(lbuf, 100, "SwapFree:       %8lu kB\n", swapfree);
@@ -3219,6 +3229,15 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 			printme = lbuf;
 		} else if (startswith(line, "SUnreclaim")) {
 			snprintf(lbuf, 100, "SUnreclaim:     %8lu kB\n", 0UL);
+			printme = lbuf;
+		} else if (startswith(line, "Shmem:")) {
+			snprintf(lbuf, 100, "Shmem:          %8lu kB\n", shmem);
+			printme = lbuf;
+		} else if (startswith(line, "ShmemHugePages")) {
+			snprintf(lbuf, 100, "ShmemHugePages: %8lu kB\n", 0UL);
+			printme = lbuf;
+		} else if (startswith(line, "ShmemPmdMapped")) {
+			snprintf(lbuf, 100, "ShmemPmdMapped: %8lu kB\n", 0UL);
 			printme = lbuf;
 		} else
 			printme = line;
@@ -3589,24 +3608,6 @@ static uint64_t get_reaper_age(pid_t pid)
 	}
 
 	return procage;
-}
-
-static uint64_t get_reaper_btime(pid)
-{
-	int ret;
-	struct sysinfo sys;
-	uint64_t procstart;
-	uint64_t uptime;
-
-	ret = sysinfo(&sys);
-	if (ret < 0) {
-		lxcfs_debug("%s\n", "failed to retrieve system information");
-		return 0;
-	}
-
-	uptime = (uint64_t)time(NULL) - (uint64_t)sys.uptime;
-	procstart = get_reaper_start_time_in_sec(pid);
-	return uptime + procstart;
 }
 
 #define CPUALL_MAX_SIZE (BUF_RESERVE_SIZE / 2)
@@ -4477,6 +4478,19 @@ static bool permute_root(void)
 	return true;
 }
 
+static int preserve_mnt_ns(int pid)
+{
+	int ret;
+	size_t len = sizeof("/proc/") + 21 + sizeof("/ns/mnt");
+	char path[len];
+
+	ret = snprintf(path, len, "/proc/%d/ns/mnt", pid);
+	if (ret < 0 || (size_t)ret >= len)
+		return -1;
+
+	return open(path, O_RDONLY | O_CLOEXEC);
+}
+
 static bool cgfs_prepare_mounts(void)
 {
 	if (!mkdir_p(BASEDIR, 0700)) {
@@ -4491,6 +4505,12 @@ static bool cgfs_prepare_mounts(void)
 
 	if (unshare(CLONE_NEWNS) < 0) {
 		lxcfs_error("Failed to unshare mount namespace: %s.\n", strerror(errno));
+		return false;
+	}
+
+	cgroup_mount_ns_fd = preserve_mnt_ns(getpid());
+	if (cgroup_mount_ns_fd < 0) {
+		lxcfs_error("Failed to preserve mount namespace: %s.\n", strerror(errno));
 		return false;
 	}
 
@@ -4567,19 +4587,6 @@ static bool cgfs_setup_controllers(void)
 	return true;
 }
 
-static int preserve_ns(int pid)
-{
-	int ret;
-	size_t len = 5 /* /proc */ + 21 /* /int_as_str */ + 7 /* /ns/mnt */ + 1 /* \0 */;
-	char path[len];
-
-	ret = snprintf(path, len, "/proc/%d/ns/mnt", pid);
-	if (ret < 0 || (size_t)ret >= len)
-		return -1;
-
-	return open(path, O_RDONLY | O_CLOEXEC);
-}
-
 static void __attribute__((constructor)) collect_and_mount_subsystems(void)
 {
 	FILE *f;
@@ -4623,7 +4630,7 @@ static void __attribute__((constructor)) collect_and_mount_subsystems(void)
 	}
 
 	/* Preserve initial namespace. */
-	init_ns = preserve_ns(getpid());
+	init_ns = preserve_mnt_ns(getpid());
 	if (init_ns < 0) {
 		lxcfs_error("%s\n", "Failed to preserve initial mount namespace.");
 		goto out;
@@ -4680,4 +4687,7 @@ static void __attribute__((destructor)) free_subsystems(void)
 	}
 	free(hierarchies);
 	free(fd_hierarchies);
+
+	if (cgroup_mount_ns_fd >= 0)
+		close(cgroup_mount_ns_fd);
 }
