@@ -9,6 +9,7 @@ lxcfs (3.0.2-1) UNRELEASED; urgency=medium
   * d/control:
     - Raised dh dependency level to 11
     - Update VCS links
+    - Bump Standards-Version to 4.2.1
   * d/copyright:
     - Use HTTPS Format: URL
     - Updated dated
