@@ -8,6 +8,9 @@ lxcfs (3.0.2-1) UNRELEASED; urgency=medium
   * d/compat bumped to 11
   * d/control:
     - Raised dh dependency level to 11
+  * d/copyright:
+    - Use HTTPS Format: URL
+    - Updated dated
 
  -- Pierre-Elliott Bécue <peb@debian.org>  Wed, 24 Oct 2018 11:26:06 +0200
 
