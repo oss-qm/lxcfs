@@ -3,9 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
 Uploaders: Adnan Hodzic <adnan@hodzic.org>, Evgeni Golov <evgeni@debian.org>
-Build-Depends: autotools-dev,
-               debhelper (>= 9.20160709),
-               dh-autoreconf,
+Build-Depends: debhelper (>= 11~),
                help2man,
                libattr1-dev,
                libfuse-dev,

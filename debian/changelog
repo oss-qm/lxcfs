@@ -3,6 +3,11 @@ lxcfs (3.0.2-1) UNRELEASED; urgency=medium
   * Team upload.
   * New upstream release 3.0.2
     - Dropped libpam-cgfs, as it's included in src:lxc now.
+  * d/rules:
+    - Tidy up the rules according to the new dh compat level
+  * d/compat bumped to 11
+  * d/control:
+    - Raised dh dependency level to 11
 
  -- Pierre-Elliott Bécue <peb@debian.org>  Wed, 24 Oct 2018 11:26:06 +0200
 
