@@ -9,7 +9,6 @@ Build-Depends: autotools-dev,
                help2man,
                libattr1-dev,
                libfuse-dev,
-               libpam0g-dev,
                linux-libc-dev,
                pkg-config
 Standards-Version: 4.1.1
@@ -28,20 +27,3 @@ Description: FUSE based filesystem for LXC
  unprivileged containers which wouldn't otherwise be allowed to mount
  cgroupfs. And a set of files that are meant to be bind-mounted over
  their /proc equivalent to make them cgroup-aware.
-
-Package: libpam-cgfs
-Architecture: linux-any
-Pre-Depends: ${misc:Pre-Depends}
-Depends: ${shlibs:Depends},
-         ${misc:Depends},
-         libpam-runtime (>= 1.0.1-6),
-         ${lxcfs:Depends}
-Conflicts: libpam-cgm
-Description: PAM module for managing cgroups for LXC
- LXCFS provides a FUSE based filesystem to improve the LXC experience
- within the containers.
- .
- This provides a Pluggable Authentication Module (PAM) to provide
- logged-in users with a set of cgroups which they can administer.
- This allows for instance unprivileged containers, and session
- management using cgroup process tracking.

@@ -20,11 +20,6 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 %:
 	dh $@  --with autotools_dev --with autoreconf --with systemd
 
-override_dh_install:
-	cp $(CURDIR)/debian/pam-cgfs.config \
-		$(CURDIR)/debian/libpam-cgfs/usr/share/pam-configs/cgfs
-	dh_install
-
 override_dh_installinit:
 	cp debian/tmp/etc/rc.d/init.d/lxcfs debian/lxcfs.init
 	dh_installinit -p lxcfs --no-restart-on-upgrade
