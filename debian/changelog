@@ -1,4 +1,4 @@
-lxcfs (3.0.2-1) UNRELEASED; urgency=medium
+lxcfs (3.0.2-1~exp+1) experimental; urgency=medium
 
   * Team upload.
   * New upstream release 3.0.2
@@ -13,8 +13,9 @@ lxcfs (3.0.2-1) UNRELEASED; urgency=medium
   * d/copyright:
     - Use HTTPS Format: URL
     - Updated dated
+  * d/upstream/signing-key.asc updated
 
- -- Pierre-Elliott Bécue <peb@debian.org>  Wed, 24 Oct 2018 11:26:06 +0200
+ -- Pierre-Elliott Bécue <peb@debian.org>  Sat, 17 Nov 2018 09:44:35 +0100
 
 lxcfs (2.0.8-1) unstable; urgency=medium
 
