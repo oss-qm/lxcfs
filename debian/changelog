@@ -1,3 +1,9 @@
+lxcfs (3.0.3-1) unstable; urgency=medium
+
+  * New upstream release: 3.0.3
+
+ -- Pierre-Elliott Bécue <peb@debian.org>  Tue, 04 Dec 2018 08:12:58 +0100
+
 lxcfs (3.0.2-1~exp+1) experimental; urgency=medium
 
   * Team upload.
