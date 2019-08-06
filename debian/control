@@ -19,6 +19,7 @@ Vcs-Browser: https://salsa.debian.org/lxc-team/lxcfs
 Package: lxcfs
 Architecture: linux-any
 Depends: lsb-base (>= 3.0-6), ${misc:Depends}, ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
 Description: FUSE based filesystem for LXC
  LXCFS provides a FUSE based filesystem to improve the LXC experience
  within the containers.
