@@ -3,6 +3,7 @@ lxcfs (3.0.4-1) UNRELEASED; urgency=medium
   * New upstream release 3.0.4
   * d/control:
     - Bump Standards-Version to 4.4.0
+    - Raise debhelper-compat to 12
 
  -- Pierre-Elliott Bécue <peb@debian.org>  Tue, 06 Aug 2019 19:42:53 +0200
 

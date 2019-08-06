@@ -5,7 +5,7 @@ Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
 Uploaders: Adnan Hodzic <adnan@hodzic.org>,
            Evgeni Golov <evgeni@debian.org>,
            Pierre-Elliott Bécue <peb@debian.org>
-Build-Depends: debhelper (>= 11~),
+Build-Depends: debhelper-compat (= 12),
                help2man,
                libattr1-dev,
                libfuse-dev,
