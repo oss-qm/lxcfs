@@ -27,7 +27,6 @@ override_dh_auto_install:
 
 override_dh_installinit:
 	mv debian/lxcfs/etc/rc.d/init.d/lxcfs debian/lxcfs.init
-	ls -alR debian/lxcfs/etc/rc.d
 	rm -rf debian/lxcfs/etc/rc.d
 	dh_installinit -p lxcfs --no-stop-on-upgrade
 
