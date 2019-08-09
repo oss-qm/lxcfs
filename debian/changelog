@@ -1,3 +1,9 @@
+lxcfs (3.0.4-2) unstable; urgency=medium
+
+  * Bump version to release properly in unstable (Closes: my own dumbness)
+
+ -- Pierre-Elliott Bécue <peb@debian.org>  Fri, 09 Aug 2019 10:33:02 +0200
+
 lxcfs (3.0.4-1) unstable; urgency=medium
 
   * New upstream release 3.0.4
