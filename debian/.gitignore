@@ -1,0 +1,9 @@
+/.debhelper
+/autoreconf.before
+/autoreconf.after
+/debhelper-build-stamp
+/files
+/lxcfs.init
+*.debhelper.log
+*.debhelper
+*.substvars
