@@ -23,11 +23,11 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 override_dh_auto_install:
 	dh_auto_install
 	find debian/lxcfs -type f -name '*.la' -delete
-	rm -rf debian/lxcfs/etc/init
+	rm -rf debian/lxcfs/etc/rc.d
+	rm -rf debian/lxcfs/etc/init.d
 
 override_dh_installinit:
-	mv debian/lxcfs/etc/rc.d/init.d/lxcfs debian/lxcfs.init
-	rm -rf debian/lxcfs/etc/rc.d
+	cp config/init/sysvinit/lxcfs debian/lxcfs.init
 	dh_installinit -p lxcfs --no-stop-on-upgrade
 
 override_dh_installsystemd:
