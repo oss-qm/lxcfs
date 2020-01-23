@@ -3318,7 +3318,7 @@ static bool read_cpu_cfs_param(const char *cg, const char *param, int64_t *value
 	if (!cgfs_get_value("cpu", cg, file, &str))
 		goto err;
 
-	if (sscanf(str, "%ld", value) != 1)
+	if (sscanf(str, "%lld", value) != 1)
 		goto err;
 
 	rv = true;
