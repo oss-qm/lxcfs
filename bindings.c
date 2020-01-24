@@ -1746,10 +1746,15 @@ int cg_opendir(const char *path, struct fuse_file_info *fi)
 	return 0;
 }
 
+static inline struct file_info * fileinf_priv(struct fuse_file_info *fi)
+{
+	return (struct file_info *)((uintptr_t)fi->fh);
+}
+
 int cg_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
 		struct fuse_file_info *fi)
 {
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	struct cgfs_files **list = NULL;
 	int i, ret;
 	char *nextcg = NULL;
@@ -1832,7 +1837,7 @@ out:
 
 static void do_release_file_info(struct fuse_file_info *fi)
 {
-	struct file_info *f = (struct file_info *)fi->fh;
+	struct file_info *f = fileinf_priv(fi);
 
 	if (!f)
 		return;
@@ -2344,7 +2349,7 @@ int cg_read(const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *f = (struct file_info *)fi->fh;
+	struct file_info *f = fileinf_priv(fi);
 	struct cgfs_files *k = NULL;
 	char *data = NULL;
 	int ret, s;
@@ -2657,7 +2662,7 @@ int cg_write(const char *path, const char *buf, size_t size, off_t offset,
 	struct fuse_context *fc = fuse_get_context();
 	char *localbuf = NULL;
 	struct cgfs_files *k = NULL;
-	struct file_info *f = (struct file_info *)fi->fh;
+	struct file_info *f = fileinf_priv(fi);
 	bool r;
 
 	if (f->type != LXC_TYPE_CGFILE) {
@@ -3098,7 +3103,7 @@ static int proc_meminfo_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	char *cg;
 	char *memusage_str = NULL, *memstat_str = NULL,
 		*memswlimit_str = NULL, *memswusage_str = NULL;
@@ -3398,7 +3403,7 @@ static int proc_cpuinfo_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	char *cg;
 	char *cpuset = NULL;
 	char *line = NULL;
@@ -3705,7 +3710,7 @@ static int proc_stat_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	char *cg;
 	char *cpuset = NULL;
 	char *line = NULL;
@@ -3922,7 +3927,7 @@ static int proc_uptime_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	unsigned long int busytime = get_reaper_busy(fc->pid);
 	char *cache = d->buf;
 	ssize_t total_len = 0;
@@ -3971,7 +3976,7 @@ static int proc_diskstats_read(char *buf, size_t size, off_t offset,
 {
 	char dev_name[72];
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	char *cg;
 	char *io_serviced_str = NULL, *io_merged_str = NULL, *io_service_bytes_str = NULL,
 			*io_wait_time_str = NULL, *io_service_time_str = NULL;
@@ -4103,7 +4108,7 @@ static int proc_swaps_read(char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
 	struct fuse_context *fc = fuse_get_context();
-	struct file_info *d = (struct file_info *)fi->fh;
+	struct file_info *d = fileinf_priv(fi);
 	char *cg = NULL;
 	char *memswlimit_str = NULL, *memlimit_str = NULL, *memusage_str = NULL, *memswusage_str = NULL;
 	unsigned long memswlimit = 0, memlimit = 0, memusage = 0, memswusage = 0, swap_total = 0, swap_free = 0;
@@ -4319,7 +4324,7 @@ int proc_release(const char *path, struct fuse_file_info *fi)
 int proc_read(const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi)
 {
-	struct file_info *f = (struct file_info *) fi->fh;
+	struct file_info *f = fileinf_priv(fi);
 
 	switch (f->type) {
 	case LXC_TYPE_PROC_MEMINFO:
